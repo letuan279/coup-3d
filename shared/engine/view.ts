@@ -1,6 +1,6 @@
 /**
  * Redacted per-viewer views (docs/SPEC.md §1.3): no card ids, no deck order, no other player's
- * hidden characters and no other player's exchange draw.
+ * hidden characters, no other player's exchange draw and no other player's deck knowledge.
  */
 import type { DeclaredAction, GameState, GameView, LoggedEvent, PhaseView, PlayerPublic, PlayerState } from '../types';
 import { getPromptFor } from './prompts';
@@ -51,7 +51,10 @@ function phaseView(s: GameState): PhaseView {
         playerId: phase.playerId,
         reason: phase.reason,
         action: s.pendingAction ? { ...s.pendingAction } : null,
-        block: s.pendingBlock ? { ...s.pendingBlock } : null,
+        // The block this loss is about. A wrong challenge of the ACTION (→ after_action_proven)
+        // can happen while a block is already pending (SPEC §1.1); that loss is not about the
+        // block, so it is left out here (GameView.pendingBlock still carries it).
+        block: s.pendingBlock && phase.then.kind !== 'after_action_proven' ? { ...s.pendingBlock } : null,
       };
     case 'exchange':
       return { kind: 'exchange', actorId: s.actorId, action: requireAction(s) };
@@ -78,6 +81,8 @@ export function buildView(s: GameState, viewerId: string | null, opts?: { logLim
     actorId: s.actorId,
     pendingAction: s.pendingAction ? { ...s.pendingAction } : null,
     pendingBlock: s.pendingBlock ? { ...s.pendingBlock } : null,
+    // Private: only the viewer's own entry, never anyone else's.
+    ...(viewer ? { knownInDeck: s.knownInDeck?.[viewer.id]?.slice() ?? [] } : {}),
     phase: phaseView(s),
     phaseSeq: s.phaseSeq,
     prompt: viewer ? getPromptFor(s, viewer.id) : null,

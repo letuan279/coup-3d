@@ -5,11 +5,14 @@
 import '../styles/ui-base.css';
 import '../styles/ui-screens.css';
 import '../styles/ui-hud.css';
+import { useEffect } from 'react';
 import { useT } from '../i18n';
 import { useGame } from '../store/useGame';
-import { ConnectionBanner } from './ConnectionBanner';
+import { ConnectionBanner, ReplacedPanel } from './ConnectionBanner';
+import { applyDocumentLang } from './documentLang';
 import { GameHUD } from './game/GameHUD';
 import { HomeScreen } from './home/HomeScreen';
+import { InvitePrompt } from './InvitePrompt';
 import { LobbyScreen } from './lobby/LobbyScreen';
 import { RulesModal } from './RulesModal';
 import { SfxDirector } from './SfxDirector';
@@ -30,6 +33,9 @@ function DealingNotice() {
 }
 
 export function UIRoot() {
+  const lang = useGame((s) => s.ui.lang);
+  useEffect(() => applyDocumentLang(lang), [lang]);
+
   const screen = useGame((s): Screen => {
     if (!s.room) return 'home';
     if (s.room.status === 'lobby') return 'lobby';
@@ -43,8 +49,10 @@ export function UIRoot() {
       {screen === 'game' && <GameHUD />}
       {screen === 'dealing' && <DealingNotice />}
       <RulesModal />
+      <InvitePrompt />
       <Toasts />
       <ConnectionBanner />
+      <ReplacedPanel />
       <SfxDirector />
     </div>
   );

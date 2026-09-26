@@ -117,7 +117,7 @@ function handIsWeak(S: Situation): boolean {
  * cheap bluff that rarely gets challenged).
  */
 function foreignAidBlockChance(S: Situation): number {
-  if (S.K.unseen.duke <= 0) return 0.03;
+  if (S.K.inHands.duke <= 0) return 0.03;
   let none = 1;
   for (const o of S.K.opponents) {
     const claimedDuke = S.depth.claims && hasClaimed(o, 'duke') && !o.lacks.has('duke');
@@ -210,6 +210,8 @@ function bestBluff(S: Situation, opts: Options): Candidate | null {
 
 /** A bluff may be slightly worse on paper than the honest play: unpredictability has value. */
 const BLUFF_SLACK = 0.08;
+/** How much worse than Tax an honest alternative may be when a Duke holder mixes its play. */
+const DUKE_MIX_SLACK = 0.12;
 
 function bluffChance(S: Situation, bluff: Candidate): number {
   let p = S.persona.bluffRate * S.tune.bluffScale;
@@ -275,9 +277,15 @@ export function chooseAction(S: Situation, prompt: ChooseActionPrompt): Move {
     const t = assassinTarget(S, assassinate.targets);
     if (t && t.pBlock < 0.6) return act('assassinate', t.id);
   }
-  if (opts.has('tax') && owns(S, 'duke')) return act('tax');
-
   const honest = bestHonest(S, opts);
+  if (opts.has('tax') && owns(S, 'duke')) {
+    // Always taxing with a Duke would make every other action a public "no Duke" tell: now and
+    // then take an honest alternative that is nearly as good.
+    const tax = selfCoinValue(S.me.coins, 3);
+    if (honest.value >= tax - DUKE_MIX_SLACK && S.rand() < S.tune.dukeMixRate) return honest.move;
+    return act('tax');
+  }
+
   const bluff = bestBluff(S, opts);
   if (bluff && bluff.value > honest.value - BLUFF_SLACK && S.rand() < bluffChance(S, bluff)) return bluff.move;
   return honest.move;

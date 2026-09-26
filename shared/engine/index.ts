@@ -14,6 +14,15 @@
  * (logged right before the effect: coins / influence loss / exchange draw), `action_blocked` or
  * `action_failed` (logged before the influence loss that goes with it) — unless the game ends
  * first → `turn_start` of the next turn or `game_over`.
+ *
+ * A target's `block` of a challengeable action (steal / assassinate) is logged when declared,
+ * but the action_response window stays open (same phaseSeq) until the other responders have
+ * challenged the ACTION or passed (SPEC §1.1), so a `block` may be followed by more `pass`es or
+ * a `challenge {against:'action'}`. If that challenge catches the actor, the block is dropped
+ * (`action_failed`, never `action_blocked`); otherwise the recorded block gets its block_response.
+ *
+ * `GameState.knownInDeck` (private): the characters a player returned with their last Exchange,
+ * cleared for everyone on any later draw from the deck; `toView` shows a player only their own.
  */
 import type { GameState, GameView, LoggedEvent, Move, MoveError, PhaseKind, Prompt } from '../types';
 import { applyMoveToState } from './moves';
@@ -74,7 +83,8 @@ export function getDefaultMove(state: GameState, playerId: string): Move | null 
 
 /**
  * Redacted view for `viewerId` (null = spectator). Never leaks hidden characters of other
- * players, deck order, card ids, or another player's exchange draw. `deadline`,
+ * players, deck order, card ids, another player's exchange draw or another player's
+ * `knownInDeck` (a player sees only their own; spectators none). `deadline`,
  * `phaseDurationMs` are null and `serverNow` is 0 — the server fills them in.
  * `logLimit` keeps only the most recent N log entries (default: all).
  */

@@ -77,8 +77,9 @@ export const core: DictPair = {
     'emote.cool': 'Dễ ợt.',
 
     'toast.kicked': 'Bạn đã bị mời ra khỏi phòng.',
-    'toast.replaced': 'Phiên chơi đã mở ở tab khác.',
+    'toast.replaced': 'Chỗ ngồi của bạn đã được mở ở tab hoặc thiết bị khác.',
     'toast.roomDeleted': 'Phòng đã đóng.',
+    'toast.expired': 'Bạn đã bị đưa ra khỏi phòng vì mất kết nối quá lâu.',
   },
   en: {
     'game.title': 'COUP',
@@ -155,7 +156,8 @@ export const core: DictPair = {
     'emote.cool': 'Easy.',
 
     'toast.kicked': 'You were removed from the room.',
-    'toast.replaced': 'This session was opened in another tab.',
+    'toast.replaced': 'Your seat was opened in another tab or on another device.',
     'toast.roomDeleted': 'The room was closed.',
+    'toast.expired': 'You were removed from the room after being disconnected for too long.',
   },
 };

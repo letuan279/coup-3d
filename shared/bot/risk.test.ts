@@ -71,3 +71,58 @@ describe('challengeRisk', () => {
     }
   });
 });
+
+describe('challengeRisk: what the table has seen', () => {
+  it('knows that claiming Duke after declining Tax is asking to be called (bot-3)', () => {
+    const declined: GameEvent[] = [actionEvent(declared('income', 'bot'))];
+    for (const level of ['normal', 'hard'] as const) {
+      expect(challengeRisk(situation(level, declined), 'duke', TAX)).toBeGreaterThanOrEqual(0.6);
+      expect(challengeRisk(situation(level, []), 'duke', TAX)).toBeLessThan(0.6);
+    }
+    // Easy bots do not think that far.
+    expect(challengeRisk(situation('easy', declined), 'duke', TAX)).toBeLessThan(0.6);
+  });
+
+  it('remembers who calls Contessa blocks, even if they challenge nothing else (bot-4)', () => {
+    const contessaCall: GameEvent[] = [
+      actionEvent(declared('assassinate', 'a', 'b')),
+      { type: 'block', blockerId: 'b', character: 'contessa', actorId: 'a', action: 'assassinate' },
+      { type: 'challenge', challengerId: 'a', challengedId: 'b', character: 'contessa', against: 'block' },
+      { type: 'challenge_result', challengerId: 'a', challengedId: 'b', character: 'contessa', challengedHadCard: true, slot: 0 },
+      { type: 'card_replaced', playerId: 'b', slot: 0, character: 'contessa' },
+    ];
+    const ctx = { via: 'block' as const, stakes: { a: 0.54 }, involved: 'a', severe: true };
+    for (const level of ['normal', 'hard'] as const) {
+      const fresh = challengeRisk(situation(level, []), 'contessa', ctx);
+      const known = challengeRisk(situation(level, contessaCall), 'contessa', ctx);
+      expect(known).toBeGreaterThan(fresh);
+    }
+    expect(challengeRisk(situation('normal', contessaCall), 'contessa', ctx)).toBeGreaterThan(0.5);
+  });
+
+  it('hard reads a player who lets every claim aimed at them go as passive (and a caller as a caller)', () => {
+    const duel: SeatSpec[] = [
+      { id: 'bot', cards: ['contessa', 'ambassador'], coins: 2 },
+      { id: 'a', cards: ['duke', 'captain'], coins: 2 },
+    ];
+    const claims = (challenged: boolean): GameEvent[] => {
+      const out: GameEvent[] = [];
+      for (let i = 0; i < 5; i++) {
+        // (Assassin claims: a steal would also mark the bot as having declined Tax.)
+        out.push(actionEvent(declared('assassinate', 'bot', 'a')));
+        if (challenged) {
+          out.push({ type: 'challenge', challengerId: 'a', challengedId: 'bot', character: 'assassin', against: 'action' });
+          out.push({ type: 'challenge_result', challengerId: 'a', challengedId: 'bot', character: 'assassin', challengedHadCard: true, slot: 0 });
+          out.push({ type: 'card_replaced', playerId: 'bot', slot: 0, character: 'assassin' });
+        }
+      }
+      return out;
+    };
+    const stakes = { via: 'action' as const, stakes: { a: 0.315 } };
+    const passive = challengeRisk(situation('hard', claims(false), duel), 'duke', stakes);
+    const fresh = challengeRisk(situation('hard', [], duel), 'duke', stakes);
+    const caller = challengeRisk(situation('hard', claims(true), duel), 'duke', stakes);
+    expect(passive).toBeLessThan(fresh);
+    expect(caller).toBeGreaterThan(fresh);
+  });
+});

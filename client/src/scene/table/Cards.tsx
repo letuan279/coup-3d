@@ -1,8 +1,9 @@
 /**
  * Influence cards on the felt: opponents' cards face-down in front of them, revealed ones
- * flipped face-up (tilted + darker), the local player's own cards propped up near the camera.
- * Animations (flip on reveal, card_replaced round trip to the deck, exchange draws) run in
- * useFrame against module-level queues.
+ * flipped face-up and stood up towards the camera (greyed), the local player's own cards
+ * propped up near the camera. Poses live in cardPose.ts. Animations (flip on reveal,
+ * card_replaced round trip to the deck, exchange draws) run in useFrame against module-level
+ * queues.
  */
 import { memo, useMemo, useRef } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
@@ -10,12 +11,13 @@ import { damp, dampAngle } from 'maath/easing';
 import { DoubleSide, MeshBasicMaterial, PlaneGeometry, type Group, type Mesh, type Vector3 } from 'three';
 import type { Character } from '@shared/types';
 import type { Lang } from '../../store/useGame';
-import { CARD_H, CARD_RADIUS, CARD_W, LOCAL_CARD_RADIUS, SEAT_RADIUS, TABLE, frameAt, type SeatFrame } from '../layout';
+import { CARD_H, CARD_RADIUS, CARD_W, LOCAL_CARD_RADIUS, SEAT_RADIUS, TABLE, frameAt } from '../layout';
 import { cardBackMat, cardFaceMat } from '../materials';
 import { cardBackTexture } from '../textures';
 import { nowSec } from '../reactions';
 import { chooseTarget, hoverEnter, hoverLeave } from '../interaction';
 import { REPLACE_DURATION, deckTop, easeInOut, exchangeFlights, replaceAnims } from './tableState';
+import { homePose, type Pose } from './cardPose';
 
 export interface CardSpec {
   key: string;
@@ -35,47 +37,16 @@ const cardGeo = (() => {
   return g;
 })();
 
-const PROP = 0.62; // own cards lean towards the camera (radians)
-const DEAD_TWIST = 0.38;
-
-interface Pose {
-  x: number;
-  y: number;
-  z: number;
-  yaw: number;
-  prop: number;
-}
-
-/** Resting pose of a card (bottom-edge centre, yaw so the card's top points `up`). */
-function homePose(spec: CardSpec, f: SeatFrame, out: Pose): Pose {
-  if (spec.isLocal) {
-    const x = spec.slot === 0 ? -0.165 : 0.165;
-    out.x = x + (spec.revealed ? (spec.slot === 0 ? -0.05 : 0.05) : 0);
-    out.z = LOCAL_CARD_RADIUS + CARD_H / 2 + (spec.revealed ? -0.04 : 0);
-    out.y = TABLE.feltY + 0.003;
-    out.yaw = spec.revealed ? (spec.slot === 0 ? DEAD_TWIST : -DEAD_TWIST) : 0;
-    out.prop = spec.revealed ? 0 : PROP;
-    return out;
-  }
-  const side = spec.slot === 0 ? -0.15 : 0.15;
-  const r = CARD_RADIUS + (spec.revealed ? 0.06 : 0);
-  const cx = f.outX * r + f.rightX * side;
-  const cz = f.outZ * r + f.rightZ * side;
-  out.x = cx - f.outX * (CARD_H / 2);
-  out.z = cz - f.outZ * (CARD_H / 2);
-  out.y = TABLE.feltY + 0.003 + spec.slot * 0.001;
-  out.yaw = Math.atan2(-f.outX, -f.outZ) + (spec.revealed ? (spec.slot === 0 ? DEAD_TWIST : -DEAD_TWIST) : 0);
-  out.prop = 0;
-  return out;
-}
-
 export const TableCard = memo(function TableCard({
   spec,
   lang,
+  interactive,
   targetable,
 }: {
   spec: CardSpec;
   lang: Lang;
+  /** An opponent's card in game mode: hovering it highlights its owner, a click picks them. */
+  interactive: boolean;
   targetable: boolean;
 }) {
   const outer = useRef<Group>(null);
@@ -133,9 +104,13 @@ export const TableCard = memo(function TableCard({
     }
   });
 
-  const handlers = targetable
+  // Always attached while interactive (like the character's hit box): if they came and went
+  // with `targetable`, R3F would never send pointer-out for a card that stops being a target
+  // under the pointer, leaving its owner highlighted. chooseTarget ignores non-targets.
+  const handlers = interactive
     ? {
         onClick: (e: ThreeEvent<MouseEvent>) => {
+          if (!targetable) return;
           e.stopPropagation();
           chooseTarget(spec.playerId);
         },

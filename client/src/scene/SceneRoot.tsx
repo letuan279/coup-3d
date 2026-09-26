@@ -8,9 +8,8 @@ import { PerformanceMonitor } from '@react-three/drei';
 import { ACESFilmicToneMapping, SRGBColorSpace } from 'three';
 import { SceneContent } from './SceneContent';
 import { registerCursorElement } from './interaction';
+import { DPR_RANGE, createDprGovernor, dprBounds, type Dpr } from './dprGovernor';
 import './scene.css';
-
-const DPR_RANGE: [number, number] = [1, 1.75];
 
 function perfEnabled(): boolean {
   try {
@@ -21,7 +20,9 @@ function perfEnabled(): boolean {
 }
 
 export function SceneRoot() {
-  const [dpr, setDpr] = useState<number | [number, number]>(DPR_RANGE);
+  const [dpr, setDpr] = useState<Dpr>(DPR_RANGE);
+  // Lowers the resolution while the scene misses the 60 FPS target; see dprGovernor.ts.
+  const governor = useMemo(() => createDprGovernor({ setDpr }), []);
   const perf = useMemo(perfEnabled, []);
   const perfRef = useRef<HTMLDivElement>(null);
 
@@ -41,12 +42,7 @@ export function SceneRoot() {
           registerCursorElement(gl.domElement);
         }}
       >
-        <PerformanceMonitor
-          flipflops={3}
-          onDecline={() => setDpr(1)}
-          onIncline={() => setDpr(DPR_RANGE)}
-          onFallback={() => setDpr(1)}
-        >
+        <PerformanceMonitor bounds={dprBounds} onDecline={governor.onDecline} onIncline={governor.onIncline}>
           <SceneContent perfTarget={perf ? perfRef : null} />
         </PerformanceMonitor>
       </Canvas>

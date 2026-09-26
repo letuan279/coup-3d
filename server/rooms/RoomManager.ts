@@ -9,7 +9,7 @@ import { systemClock, type Clock } from '../clock';
 import { DEFAULT_TIMING, type ServerTiming } from '../timing';
 import { fail, type Connection, type Result } from '../transport';
 import type { DecideBot } from './botDriver';
-import { Room, type ClosedReason, type JoinProfile } from './Room';
+import { Room, type ClosedReason, type JoinProfile, type JoinRequest } from './Room';
 
 /** How long (and how many) "your seat is gone" notices are kept for offline clients. */
 const NOTICE_TTL_MS = 6 * 60 * 60_000;
@@ -121,15 +121,19 @@ export class RoomManager {
     return { ok: true, code: room.code };
   }
 
-  joinRoom(token: string, code: string | null, profile: JoinProfile): Result<{ code: string }> {
+  /**
+   * Join by code. While a game is running/finished this only reclaims the seat whose
+   * `req.rejoinKey` matches (see Room.join); the seat's previous token is released.
+   */
+  joinRoom(token: string, code: string | null, req: JoinRequest): Result<{ code: string }> {
     const conn = this.conns.get(token);
     if (!conn) return fail('bad_request');
     const room = code ? this.rooms.get(code) : undefined;
     if (!room || room.isClosed) return fail('room_not_found');
-    const denied = room.checkJoin(token, profile);
+    const denied = room.checkJoin(token, req);
     if (denied) return denied;
     if (this.tokenRooms.get(token) !== room) this.leaveCurrent(token);
-    const res = room.join(token, conn, profile);
+    const res = room.join(token, conn, req);
     if (!res.ok) return res;
     this.tokenRooms.set(token, room);
     this.notices.delete(token);

@@ -56,10 +56,11 @@ describe('assassinate', () => {
     const { state, events } = play(base(['contessa', 'duke']), [
       ['p0', assassinate('p1')],
       ['p1', block('contessa')],
-      ['p2', PASS],
+      ['p2', PASS], // still the action window: p2 lets the Assassin claim stand
+      ['p2', PASS], // block window
       ['p0', PASS],
     ]);
-    expect(types(events)).toEqual(['action', 'coins', 'block', 'pass', 'pass', 'action_blocked', 'turn_start']);
+    expect(types(events)).toEqual(['action', 'coins', 'block', 'pass', 'pass', 'pass', 'action_blocked', 'turn_start']);
     expect(coinsOf(state, 'p0')).toBe(0);
     expect(hiddenCount(state, 'p1')).toBe(2);
   });
@@ -68,6 +69,7 @@ describe('assassinate', () => {
     const s = play(base(['duke', 'captain']), [
       ['p0', assassinate('p1')],
       ['p1', block('contessa')],
+      ['p2', PASS],
       ['p0', CHALLENGE],
     ]).state;
     expect(s.phase).toEqual({
@@ -199,9 +201,10 @@ describe('steal', () => {
       const { state, events } = play(declared, [
         ['p1', block(character)],
         ['p2', PASS],
+        ['p2', PASS],
         ['p0', PASS],
       ]);
-      expect(types(events)).toEqual(['block', 'pass', 'pass', 'action_blocked', 'turn_start']);
+      expect(types(events)).toEqual(['block', 'pass', 'pass', 'pass', 'action_blocked', 'turn_start']);
       expect(coinsOf(state, 'p0')).toBe(2);
       expect(coinsOf(state, 'p1')).toBe(2);
     });
@@ -275,6 +278,7 @@ describe('steal', () => {
     const { state, events } = play(s, [
       ['p0', steal('p1')],
       ['p1', block('captain')],
+      ['p2', PASS],
       ['p0', CHALLENGE],
       ['p1', reveal(0)],
     ]);
@@ -287,6 +291,7 @@ describe('steal', () => {
     const { state, events } = play(s, [
       ['p0', steal('p1')],
       ['p1', block('captain')],
+      ['p2', PASS],
       ['p2', CHALLENGE],
     ]);
     expect(types(events).slice(-6)).toEqual([

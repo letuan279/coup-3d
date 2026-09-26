@@ -1,22 +1,14 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
-import { NAME_MAX_LENGTH, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@shared/constants';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { NAME_MAX_LENGTH, ROOM_CODE_LENGTH } from '@shared/constants';
 import { getCardFaceUrl } from '../../art/cardArt';
 import { useT } from '../../i18n';
-import { api, roomCodeFromUrl } from '../../net/socket';
+import { sanitizeCode } from '../../net/links';
+import { api, clearInvite, inviteKeyFor } from '../../net/socket';
 import { useGame } from '../../store/useGame';
 import { AvatarPicker } from '../common/AvatarPicker';
 import { Icon } from '../common/Icon';
 import { LangToggle, RulesButton, SoundToggle } from '../common/Toggles';
 import { errorKey } from '../errors';
-
-function sanitizeCode(raw: string): string {
-  let out = '';
-  for (const ch of raw.toUpperCase()) {
-    if (ROOM_CODE_ALPHABET.includes(ch)) out += ch;
-    if (out.length >= ROOM_CODE_LENGTH) break;
-  }
-  return out;
-}
 
 /** Replays a CSS shake on an element. */
 function shake(el: HTMLElement | null) {
@@ -32,9 +24,15 @@ export function HomeScreen() {
   const profile = useGame((s) => s.profile);
   const setProfile = useGame((s) => s.setProfile);
   const toast = useGame((s) => s.toast);
-  const invited = useMemo(() => sanitizeCode(roomCodeFromUrl() ?? ''), []);
+  // Invite link (?room=CODE) captured by net/socket.ts; gone again if a rejoin link turned out dead.
+  const invited = useGame((s) => s.invite?.code ?? '');
+  const autoJoining = useGame((s) => !!s.invite?.joining);
   const [code, setCode] = useState(invited);
-  const [busy, setBusy] = useState<'create' | 'join' | null>(null);
+  const [busyState, setBusy] = useState<'create' | 'join' | null>(null);
+  const busy = autoJoining ? 'join' : busyState;
+  useEffect(() => {
+    if (invited) setCode(invited);
+  }, [invited]);
   const nameRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +56,7 @@ export function HomeScreen() {
     const name = validName();
     if (!name || busy) return;
     setBusy('create');
+    clearInvite();
     const res = await api.createRoom(name, profile.avatar);
     setBusy(null);
     if (!res.ok) toast(errorKey(res.error), 'error');
@@ -74,7 +73,10 @@ export function HomeScreen() {
       return;
     }
     setBusy('join');
-    const res = await api.joinRoom(code, name, profile.avatar);
+    // A rejoin link that could not be used automatically still works from here.
+    const key = inviteKeyFor(code);
+    if (invited && invited !== code) clearInvite();
+    const res = await api.joinRoom(code, name, profile.avatar, key);
     setBusy(null);
     if (!res.ok) toast(errorKey(res.error), 'error');
   };

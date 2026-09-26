@@ -45,6 +45,12 @@ function clonePlayer(p: PlayerState): PlayerState {
   return { ...p, influences: p.influences.map((inf) => ({ card: inf.card, revealed: inf.revealed })) };
 }
 
+function cloneKnownInDeck(known: Record<string, Character[]>): Record<string, Character[]> {
+  const out: Record<string, Character[]> = {};
+  for (const [id, chars] of Object.entries(known)) out[id] = chars.slice();
+  return out;
+}
+
 /** Copy every mutable container of the state (logged events and cards are shared, never mutated). */
 export function cloneState(s: GameState): GameState {
   return {
@@ -56,6 +62,7 @@ export function cloneState(s: GameState): GameState {
     actorId: s.actorId,
     pendingAction: s.pendingAction ? { ...s.pendingAction } : null,
     pendingBlock: s.pendingBlock ? { ...s.pendingBlock } : null,
+    ...(s.knownInDeck ? { knownInDeck: cloneKnownInDeck(s.knownInDeck) } : {}),
     phase: clonePhase(s.phase),
     phaseSeq: s.phaseSeq,
     log: s.log.slice(),

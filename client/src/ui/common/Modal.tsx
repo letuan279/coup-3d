@@ -9,13 +9,15 @@ interface Props {
   /** Lighter backdrop so the table stays visible (in-game decisions). */
   soft?: boolean;
   closeLabel?: string;
+  /** Above everything else (toasts and the connection banner included) — the app is unusable until it is resolved. */
+  blocking?: boolean;
 }
 
 /** Centered sticker panel over a dimmed backdrop. Clicking the backdrop closes (if closable). */
-export function Modal({ title, children, onClose, className, soft, closeLabel }: Props) {
+export function Modal({ title, children, onClose, className, soft, closeLabel, blocking }: Props) {
   return (
     <div
-      className={`modal-backdrop interactive${soft ? ' is-soft' : ''}`}
+      className={`modal-backdrop interactive${soft ? ' is-soft' : ''}${blocking ? ' is-blocking' : ''}`}
       onPointerDown={(e) => {
         if (onClose && e.target === e.currentTarget) onClose();
       }}

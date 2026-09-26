@@ -6,7 +6,7 @@ export default defineConfig({
     alias: { '@shared': fileURLToPath(new URL('./shared', import.meta.url)) },
   },
   test: {
-    include: ['shared/**/*.test.ts', 'server/**/*.test.ts', 'client/src/**/*.test.ts', '.review/**/*.test.ts'],
+    include: ['shared/**/*.test.ts', 'server/**/*.test.ts', 'client/src/**/*.test.ts'],
     environment: 'node',
     testTimeout: 30000,
   },

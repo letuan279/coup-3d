@@ -13,7 +13,7 @@ export const BOT_NAMES: Record<AvatarId, readonly string[]> = {
   owl: ['Cú Mèo', 'Cú Thông Thái', 'Cú Đêm', 'Cú Già'],
 };
 
-/** Case-insensitive key used for name comparisons (uniqueness, rejoin by name). */
+/** Case-insensitive key used for name comparisons (uniqueness within a room). */
 export function nameKey(name: string): string {
   return name.normalize('NFC').trim().toLocaleLowerCase('vi');
 }

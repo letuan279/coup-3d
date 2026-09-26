@@ -159,6 +159,11 @@ Policy sketch (normal/hard):
 - Lose influence: keep the card most useful / consistent with past claims (don't reveal the character you've been claiming if you have the choice).
 - Exchange: keep the best combination (value table + diversity), prefer consistency with previous claims.
 - Targeting: threat = hidden influence count × 3 + coins/2 + (claims Assassin) + leader bonus; prefer finishing 1-influence players when close to winning.
+- Private knowledge: `GameView.knownInDeck` (characters the bot itself returned by Exchange, until the next draw) — those copies can't be in any opponent's hand (used for certain-bluff detection, not for estimating what the table can see).
+- Tells: a player who took a non-Tax action with < 7 coins probably has no Duke ("declined Tax"); bots avoid giving that tell away when bluffing Duke later.
+- Per-opponent memory of how they react to claims aimed at them (challenge habits, Contessa-block calls) — adapts to humans who always bluff or always challenge.
+- Last-card desperation: when letting a block stand means being couped next turn, challenge it.
+- Quality is checked with `scripts/simulate.ts` (incl. `--exploits`: scripted always-bluff / always-challenge / always-block opponents) and `shared/bot/sim.test.ts`.
 - Levels: easy = random-ish, rarely challenges (only certain bluffs sometimes), bluffs rarely, poor targeting; normal = the above with moderate randomness; hard = tighter thresholds, full claim-history reasoning, better timing.
 
 ## 4. Client
@@ -187,7 +192,7 @@ Policy sketch (normal/hard):
 - **Sunny Tavern**: round wooden table with bright emerald felt, warm wooden floor, turquoise walls with big windows (bright sky, sun shafts), bar counter + shelves with colourful bottles (instanced), string lights, plants, hanging lamps. Warm golden-hour sun (one shadow-casting directional light, shadow map ≤1024, tight frustum) + hemisphere light.
 - **Seats**: up to 6 around the table. The local player sits at the camera (first-person, not rendered as a body; their 2 cards lie on the felt in front of the camera). Others are placed around the far arc by relative seat order (turn order clockwise). Spectator/home: slow orbit camera; lobby: elevated view of the table with joined players seated.
 - **Characters**: chunky cartoon animals (pig, fox, bulldog, bunny, frog, bear, cat, owl) built from primitives (no external assets), toon-ish material, seated on chairs. Idle: breathing bob, blinking, head follows the current actor. Reactions: lean in when acting, shake on losing influence, happy bounce on winning a challenge, elimination → slump + desaturate + little ghost/"X" eyes (Liar's Bar vibe, but cute). Bot seats show a small antenna/badge; disconnected seats show a "zzz"/wifi-off icon.
-- **Table objects**: each player's 2 cards face-down in front of them (revealed cards flip face-up with the character art, tilted and greyed), coin stacks (InstancedMesh, one mesh for all coins) that animate when coins move (arc fly between player ↔ treasury ↔ player), treasury pile + court deck in the centre (deck height follows deckCount).
+- **Table objects**: each player's 2 cards face-down in front of them (revealed cards flip face-up with the character art and stand up facing the local seat, greyed, so dead characters stay readable), coin stacks (InstancedMesh, one mesh for all coins) that animate when coins move (arc fly between player ↔ treasury ↔ player), treasury pile + court deck in the centre (deck height follows deckCount).
 - **In-world labels** (drei `Html`, ≤ 1 per seat + bubbles): nameplate (name, coins, hidden-card count, bot/offline badge) with a countdown ring when that player must decide; speech bubbles for claims ("Tôi là Công tước!", "Thách thức!", "Chặn!"), emotes.
 - **Interaction**: in targeting mode (`ui.targeting`), valid targets glow + cursor pointer; click → `api.move({type:'action', action, targetId})`; hover sets `ui.hoverPlayerId`. Active actor gets a warm spotlight/ring.
 - **Performance budget**: ≤150 draw calls, ≤150k triangles, no per-frame React state updates (mutate refs in `useFrame`), shared geometries/materials, textures created once (cache), no postprocessing, `frameloop="always"` but avoid work when idle.
@@ -196,4 +201,4 @@ Policy sketch (normal/hard):
 - `npm run typecheck` clean, `npm test` green, `npm run build` succeeds.
 - Engine: exhaustive unit tests per rule + a fuzz test (thousands of random legal games) with invariants: coins conserved (players + treasury = 50), 15 cards conserved (hands + deck + exchange draw), phaseSeq monotonic, game terminates, no hidden info in views/log.
 - Bots: never produce illegal moves (fuzz against the engine), win rate hard > normal > easy in simulations, always challenge impossible claims.
-- Server: integration tests with real socket.io clients: create/join/bots/start/full bot game/reconnect/takeover/leave/rejoin-by-name/timeouts.
+- Server: integration tests with real socket.io clients: create/join/bots/start/full bot game/reconnect/takeover/leave/rejoin-with-key/timeouts.

@@ -1,6 +1,7 @@
 /**
  * Procedural CanvasTextures for the tavern (no external image assets). Every texture is
- * created once and cached at module level.
+ * created once and cached at module level; the ones with text (sign, cards) are redrawn in
+ * place when the web fonts arrive late (art/refresh.ts).
  */
 import {
   CanvasTexture,
@@ -14,8 +15,9 @@ import {
 } from 'three';
 import type { Character } from '@shared/types';
 import type { Lang } from '../store/useGame';
-import { getCardBackCanvas, getCardFaceCanvas } from '../art/cardArt';
+import { getCardBackCanvas, getCardFaceCanvas, repaintCanvas } from '../art/cardArt';
 import { FONT_DISPLAY, PALETTE } from '../art/palette';
+import { onArtRefresh } from '../art/refresh';
 import { createRng } from '@shared/rng';
 
 const cache = new Map<string, Texture>();
@@ -243,45 +245,49 @@ export function rugTexture(): CanvasTexture {
 export function signTexture(lang: Lang): CanvasTexture {
   return cached(`sign:${lang}`, () => {
     const [c, g] = canvas(1024, 256);
-    g.fillStyle = '#8E5220';
-    roundRect(g, 0, 0, 1024, 256, 60);
-    g.fill();
-    g.fillStyle = '#C9803F';
-    roundRect(g, 14, 14, 996, 228, 48);
-    g.fill();
-    g.strokeStyle = PALETTE.mustard;
-    g.lineWidth = 6;
-    roundRect(g, 30, 30, 964, 196, 38);
-    g.stroke();
-    // little sun on both sides
-    for (const x of [110, 914]) {
-      g.fillStyle = PALETTE.mustard;
-      g.beginPath();
-      g.arc(x, 128, 38, 0, Math.PI * 2);
-      g.fill();
-      g.strokeStyle = PALETTE.mustard;
-      g.lineWidth = 8;
-      g.lineCap = 'round';
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        g.beginPath();
-        g.moveTo(x + Math.cos(a) * 52, 128 + Math.sin(a) * 52);
-        g.lineTo(x + Math.cos(a) * 66, 128 + Math.sin(a) * 66);
-        g.stroke();
-      }
-    }
-    const title = lang === 'vi' ? 'QUÁN BÀI NẮNG' : 'SUNNY TAVERN';
-    g.font = `800 104px ${FONT_DISPLAY}`;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.lineJoin = 'round';
-    g.lineWidth = 16;
-    g.strokeStyle = PALETTE.ink;
-    g.strokeText(title, 512, 140, 700);
-    g.fillStyle = PALETTE.cream;
-    g.fillText(title, 512, 140, 700);
+    drawSign(g, lang);
     return srgb(c);
   });
+}
+
+function drawSign(g: CanvasRenderingContext2D, lang: Lang): void {
+  g.fillStyle = '#8E5220';
+  roundRect(g, 0, 0, 1024, 256, 60);
+  g.fill();
+  g.fillStyle = '#C9803F';
+  roundRect(g, 14, 14, 996, 228, 48);
+  g.fill();
+  g.strokeStyle = PALETTE.mustard;
+  g.lineWidth = 6;
+  roundRect(g, 30, 30, 964, 196, 38);
+  g.stroke();
+  // little sun on both sides
+  for (const x of [110, 914]) {
+    g.fillStyle = PALETTE.mustard;
+    g.beginPath();
+    g.arc(x, 128, 38, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = PALETTE.mustard;
+    g.lineWidth = 8;
+    g.lineCap = 'round';
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(x + Math.cos(a) * 52, 128 + Math.sin(a) * 52);
+      g.lineTo(x + Math.cos(a) * 66, 128 + Math.sin(a) * 66);
+      g.stroke();
+    }
+  }
+  const title = lang === 'vi' ? 'QUÁN BÀI NẮNG' : 'SUNNY TAVERN';
+  g.font = `800 104px ${FONT_DISPLAY}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = 16;
+  g.strokeStyle = PALETTE.ink;
+  g.strokeText(title, 512, 140, 700);
+  g.fillStyle = PALETTE.cream;
+  g.fillText(title, 512, 140, 700);
 }
 
 /** Soft-edged fade used by the light shafts (bright near the window, fading out along the beam). */
@@ -374,6 +380,24 @@ export function cardFaceTexture(character: Character, lang: Lang): CanvasTexture
 export function cardBackTexture(): CanvasTexture {
   return cached('card:back', () => srgb(getCardBackCanvas(), false, 8));
 }
+
+/**
+ * Fonts arrived after the text textures were drawn: the art module has already repainted the
+ * card canvases in place; repaint the sign here and re-upload all of them (same objects, so
+ * every material keeps working).
+ */
+export function refreshTextTextures(): void {
+  for (const [key, tex] of cache) {
+    if (key.startsWith('sign:')) {
+      repaintCanvas(tex.image as HTMLCanvasElement, (g) => drawSign(g, key.slice(5) as Lang));
+      tex.needsUpdate = true;
+    } else if (key.startsWith('card:')) {
+      tex.needsUpdate = true;
+    }
+  }
+}
+
+onArtRefresh(refreshTextTextures);
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   g.beginPath();

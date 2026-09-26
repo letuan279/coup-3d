@@ -264,6 +264,18 @@
   flex-wrap: wrap;
 }
 
+/* Shown when the page is opened via localhost: the copied link only works on this computer. */
+.code-hint {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff0cf;
+  border: 2px dashed var(--mustard-dark);
+  font: 700 12.5px/1.35 var(--font-body);
+  color: var(--ink-soft);
+  text-align: left;
+}
+
 .seats-card {
   flex: 0 1 auto;
   min-height: 0;

@@ -126,6 +126,26 @@ button.chip .icon {
   background: var(--sand);
 }
 
+.menu-item--tall {
+  align-items: flex-start;
+}
+
+.menu-item--tall > .icon {
+  margin-top: 2px;
+}
+
+.menu-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menu-item__hint {
+  font: 700 12px/1.3 var(--font-body);
+  color: var(--ink-soft);
+}
+
 .menu-item--static {
   cursor: default;
 }
@@ -882,6 +902,15 @@ button.chip .icon {
   background: #d7d1df;
 }
 
+/* Revealed card: a chip in the character's colour, struck through (name in the tooltip). */
+.pip.is-lost.has-char {
+  width: 12px;
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1.5px), rgba(255, 255, 255, 0.9) calc(50% - 1.5px) calc(50% + 1.5px), transparent calc(50% + 1.5px)),
+    var(--cc);
+  opacity: 0.85;
+}
+
 /* Response panel */
 .response-panel {
   width: 100%;
@@ -1321,7 +1350,36 @@ button.chip .icon {
 .confirm-modal__buttons {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.confirm-modal__warn {
+  margin: -8px 0 18px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #ffe4df;
+  border: 2px solid var(--coral);
+  font: 700 14px/1.4 var(--font-body);
+}
+
+/* "Opened in another tab" */
+.replaced-modal__body {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.replaced-modal__body > .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--coral);
+}
+
+.replaced-modal__hint {
+  margin: -10px 0 18px;
+  font: 700 13px/1.4 var(--font-body);
+  color: var(--ink-soft);
 }
 
 /* ── Game over ── */

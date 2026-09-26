@@ -5,7 +5,7 @@ import { useT } from '../../i18n';
 import { api } from '../../net/socket';
 import { useGame } from '../../store/useGame';
 import { withToast } from '../apiToast';
-import { copyText, inviteLink } from '../clipboard';
+import { copyText, inviteLink, servedFromLocalhost } from '../clipboard';
 import { Icon } from '../common/Icon';
 import { LangToggle, RulesButton, SoundToggle } from '../common/Toggles';
 import { useIsHost } from '../hooks';
@@ -22,6 +22,7 @@ export function LobbyScreen() {
   if (!room) return null;
 
   const seats = Array.from({ length: room.maxPlayers }, (_, i) => room.players.find((p) => p.seat === i));
+  const firstEmpty = seats.findIndex((p) => !p);
   const count = room.players.length;
   const full = count >= room.maxPlayers;
   const canStart = count >= MIN_PLAYERS;
@@ -55,6 +56,7 @@ export function LobbyScreen() {
               {t('lobby.copyLink')}
             </button>
           </div>
+          {servedFromLocalhost() && <p className="code-hint">{t('lobby.localhostHint')}</p>}
         </section>
 
         <section className="lobby-card sticker seats-card">
@@ -64,7 +66,15 @@ export function LobbyScreen() {
           </h3>
           <ul className="seat-list">
             {seats.map((p, i) => (
-              <SeatCard key={p?.id ?? `empty-${i}`} seat={i} player={p} youId={room.youId} isHost={isHost} botLevel={botLevel} />
+              <SeatCard
+                key={p?.id ?? `empty-${i}`}
+                seat={i}
+                player={p}
+                youId={room.youId}
+                isHost={isHost}
+                botLevel={botLevel}
+                canAddBot={i === firstEmpty}
+              />
             ))}
           </ul>
         </section>

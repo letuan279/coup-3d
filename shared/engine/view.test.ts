@@ -101,6 +101,24 @@ describe('toView', () => {
     expect(toView(s, 'p2').prompt).toEqual({ kind: 'respond_action', canChallenge: true, blockCharacters: [] });
     s = act(s, 'p1', block('contessa')).state;
     const blockDecl = { blockerId: 'p1', character: 'contessa' };
+    // The block is public at once, while p2 may still challenge the Assassin claim.
+    for (const viewer of everyViewer(s)) {
+      const view = toView(s, viewer);
+      expect(view.pendingBlock).toEqual(blockDecl);
+      expect(view.phase).toEqual({
+        kind: 'action_response',
+        action,
+        responders: ['p1', 'p2'],
+        passed: ['p1'],
+        canChallenge: true,
+        blockers: ['p1'],
+        blockCharacters: ['contessa'],
+      });
+      assertRedacted(s, view, viewer);
+    }
+    expect(toView(s, 'p2').prompt).toEqual({ kind: 'respond_action', canChallenge: true, blockCharacters: [] });
+    expect(toView(s, 'p1').prompt).toBeNull();
+    s = act(s, 'p2', PASS).state;
     expect(toView(s, 'p0').phase).toEqual({ kind: 'block_response', action, block: blockDecl, responders: ['p2', 'p0'], passed: [] });
     expect(toView(s, 'p0').pendingBlock).toEqual(blockDecl);
     s = play(s, [

@@ -21,6 +21,7 @@ export const scene: DictPair = {
     'scene.plate.pickTarget': 'Chọn',
     'scene.plate.wins': '{n} thắng',
     'scene.plate.cards': '{n} lá úp',
+    'scene.plate.revealed': 'Đã lật: {char}',
 
     'scene.perf.fps': 'FPS',
     'scene.perf.calls': 'Lệnh vẽ',
@@ -45,6 +46,7 @@ export const scene: DictPair = {
     'scene.plate.pickTarget': 'Pick',
     'scene.plate.wins': '{n} wins',
     'scene.plate.cards': '{n} hidden',
+    'scene.plate.revealed': 'Revealed: {char}',
 
     'scene.perf.fps': 'FPS',
     'scene.perf.calls': 'Draw calls',

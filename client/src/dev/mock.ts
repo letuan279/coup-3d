@@ -2,6 +2,9 @@
  * Dev-only fixture mode: open the app with `?mock=<name>` to preview screens without a server.
  *
  *   ?mock=home | lobby | game | respond | block | blockresp | lose | exchange | waiting | six | over
+ *         | pendingblock (target blocked, you may still challenge the action) | blocked (you blocked,
+ *           others may still challenge) | replaced (session opened in another tab) | invite (invite
+ *           link while still seated in another room)
  *   add `&events=1` to replay a scripted loop of game events on the bus (animation testing).
  *
  * Moves/emotes are logged to the console and acknowledged with ok.
@@ -9,6 +12,8 @@
 import type {
   AvatarId,
   Character,
+  DeclaredAction,
+  DeclaredBlock,
   GameEvent,
   GameView,
   LobbyPlayer,
@@ -19,7 +24,7 @@ import type {
   RoomView,
 } from '@shared/types';
 import { ACTIONS } from '@shared/constants';
-import { useGame } from '../store/useGame';
+import { useGame, type ConnStatus, type Invite } from '../store/useGame';
 import { emit } from '../net/bus';
 import { setMockHandler } from '../net/socket';
 
@@ -64,6 +69,7 @@ function room(n: number, status: RoomView['status']): RoomView {
     players: lobbyPlayers(n),
     settings: { turnSeconds: 30, responseSeconds: 12 },
     youId: 'p1',
+    rejoinKey: 'mock-rejoin-key-0123456789',
     maxPlayers: 6,
     gameNumber: 3,
   };
@@ -159,7 +165,39 @@ function view(n: number, phase: PhaseView, prompt: Prompt | null, actorId: strin
   };
 }
 
-function fixture(name: string): { room: RoomView | null; game: GameView | null } {
+/** Steal whose target already blocked while the others may still challenge the Captain claim. */
+function blockedStealWindow(action: DeclaredAction, block: DeclaredBlock, responders: string[], prompt: Prompt | null): GameView {
+  const log = [
+    ...baseLog,
+    ev({ type: 'turn_start', playerId: action.actorId, turn: 8 }, 8),
+    ev({ type: 'action', actorId: action.actorId, action: action.type, targetId: action.targetId, claim: action.claim }, 8),
+    ev({ type: 'block', blockerId: block.blockerId, character: block.character, actorId: action.actorId, action: action.type }, 8),
+  ];
+  return view(
+    5,
+    {
+      kind: 'action_response',
+      action,
+      responders,
+      passed: [block.blockerId],
+      canChallenge: true,
+      blockers: [block.blockerId],
+      blockCharacters: ['captain', 'ambassador'],
+    },
+    prompt,
+    action.actorId,
+    { pendingBlock: block, log },
+  );
+}
+
+interface Fixture {
+  room: RoomView | null;
+  game: GameView | null;
+  conn?: ConnStatus;
+  invite?: Invite;
+}
+
+function fixture(name: string): Fixture {
   switch (name) {
     case 'home':
       return { room: null, game: null };
@@ -219,6 +257,32 @@ function fixture(name: string): { room: RoomView | null; game: GameView | null }
         ),
       };
     }
+    case 'pendingblock': {
+      // "Bé Heo tuyên bố Thuyền trưởng để Cướp xu của Ông Gấu — Ông Gấu đã chặn bằng Đại sứ"
+      const action = { type: 'steal' as const, actorId: 'p2', targetId: 'p4', claim: 'captain' as const };
+      const block = { blockerId: 'p4', character: 'ambassador' as const };
+      return {
+        room: room(5, 'playing'),
+        game: blockedStealWindow(action, block, ['p1', 'p3', 'p4', 'p5'], {
+          kind: 'respond_action',
+          canChallenge: true,
+          blockCharacters: [],
+        }),
+      };
+    }
+    case 'blocked': {
+      const action = { type: 'steal' as const, actorId: 'p4', targetId: 'p1', claim: 'captain' as const };
+      const block = { blockerId: 'p1', character: 'ambassador' as const };
+      return { room: room(5, 'playing'), game: blockedStealWindow(action, block, ['p1', 'p2', 'p3', 'p5'], null) };
+    }
+    case 'replaced':
+      return { room: null, game: null, conn: 'replaced' };
+    case 'invite':
+      return {
+        room: room(5, 'playing'),
+        game: view(5, { kind: 'turn', actorId: 'p3' }, null, 'p3'),
+        invite: { code: 'NEWXX' },
+      };
     case 'blockresp': {
       const action = { type: 'foreign_aid' as const, actorId: 'p1' };
       const block = { blockerId: 'p3', character: 'duke' as const };
@@ -312,7 +376,7 @@ function scriptedEvents(): LoggedEvent[][] {
 
 export function installMock(name: string) {
   const f = fixture(name);
-  useGame.setState({ conn: 'connected', room: f.room, game: f.game, clockOffset: 0 });
+  useGame.setState({ conn: f.conn ?? 'connected', room: f.room, game: f.game, invite: f.invite ?? null, clockOffset: 0 });
   setMockHandler((call, payload) => {
     console.info('[mock api]', call, payload);
     if (call === 'game:emote' && payload && typeof payload === 'object') {

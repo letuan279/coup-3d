@@ -30,6 +30,20 @@ export interface Profile {
   avatar: AvatarId;
 }
 
+/**
+ * Room link this tab was opened with (`/?room=CODE`, optionally `&key=REJOIN_KEY`). Written by
+ * net/socket.ts. Home pre-fills `code`; when the server re-attached us to ANOTHER room the HUD
+ * asks whether to leave that room and join this one. Cleared once used or dismissed.
+ */
+export interface Invite {
+  /** Upper-cased room code from the link. */
+  code: string;
+  /** Seat rejoin key from the link (secret — never displayed). */
+  key?: string;
+  /** An automatic rejoin with `key` is in flight. */
+  joining?: boolean;
+}
+
 export interface UIState {
   lang: Lang;
   muted: boolean;
@@ -49,6 +63,8 @@ export interface GameStore {
   /** serverNow - Date.now() measured at the last game:state. Use `serverNow()` below. */
   clockOffset: number;
   profile: Profile;
+  /** See `Invite`. */
+  invite: Invite | null;
   ui: UIState;
 
   // ── UI actions (local only) ──
@@ -102,6 +118,7 @@ export const useGame = create<GameStore>((set, get) => ({
         ? savedProfile.avatar
         : AVATARS[Math.floor(Math.random() * AVATARS.length)],
   },
+  invite: null,
   ui: {
     lang: prefs.lang === 'en' ? 'en' : 'vi',
     muted: prefs.muted === true,

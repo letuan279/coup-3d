@@ -20,6 +20,14 @@ export const TOKEN_MAX_LENGTH = 128;
 const ID_MAX_LENGTH = 64;
 /** Raw name strings longer than this are rejected before normalisation. */
 const RAW_NAME_MAX_LENGTH = 64;
+/**
+ * Rejoin keys are server-generated base64url strings (server/rooms/rejoinKey.ts). Anything that
+ * is not base64url or is longer than this is garbage → `bad_request`; a well-formed key that
+ * matches no seat is the room's call (`bad_rejoin_key`), so a truncated link still gets a clear
+ * answer.
+ */
+const REJOIN_KEY_MAX_LENGTH = 64;
+const REJOIN_KEY_RE = /^[A-Za-z0-9_-]+$/;
 const BOT_LEVELS: readonly BotLevel[] = ['easy', 'normal', 'hard'];
 const MAX_EXCHANGE_CARDS = INFLUENCES_PER_PLAYER + 2;
 /** Control, zero-width and bidi-override characters — replaced by spaces in names. */
@@ -90,9 +98,47 @@ export function parseCreatePayload(value: unknown): ProfileInput {
   return profile(requireRecord(value, 'room:create'));
 }
 
-export function parseJoinPayload(value: unknown): ProfileInput & { code: string | null } {
+/** Optional `rejoinKey`: absent/null/'' → undefined; else a trimmed base64url string (else BadRequest). */
+export function parseRejoinKey(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') throw new BadRequest('rejoinKey: expected a string');
+  const key = value.trim();
+  if (key.length < 1 || key.length > REJOIN_KEY_MAX_LENGTH || !REJOIN_KEY_RE.test(key)) {
+    throw new BadRequest('rejoinKey: invalid');
+  }
+  return key;
+}
+
+export interface JoinInput {
+  code: string | null;
+  /** Always set without a rejoinKey. With one it may be absent: a reclaim ignores the profile. */
+  name?: string;
+  avatar?: AvatarId;
+  rejoinKey?: string;
+}
+
+/** Keep a profile field when it is valid, drop it when not (reclaims ignore the profile anyway). */
+function lenient<T>(parse: () => T): T | undefined {
+  try {
+    return parse();
+  } catch (err) {
+    if (err instanceof BadRequest) return undefined;
+    throw err;
+  }
+}
+
+export function parseJoinPayload(value: unknown): JoinInput {
   const p = requireRecord(value, 'room:join');
-  return { code: parseRoomCode(p.code), ...profile(p) };
+  const code = parseRoomCode(p.code);
+  const rejoinKey = parseRejoinKey(p.rejoinKey);
+  if (rejoinKey === undefined) return { code, ...profile(p) };
+  // `{code, rejoinKey}` alone is a valid reclaim; a lobby join still needs the name (room checks).
+  const out: JoinInput = { code, rejoinKey };
+  const name = lenient(() => parseName(p.name));
+  const avatar = lenient(() => optionalAvatar(p.avatar));
+  if (name !== undefined) out.name = name;
+  if (avatar !== undefined) out.avatar = avatar;
+  return out;
 }
 
 export function parseUpdatePayload(value: unknown): Partial<ProfileInput> {

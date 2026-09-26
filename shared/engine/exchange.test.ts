@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Move } from '../types';
+import type { Character, GameState, Move } from '../types';
 import { applyMove, getDefaultMove, getPrompt, listLegalMoves, toView } from './index';
 import { CHALLENGE, PASS, act, hand, newGame, play, player, reveal, rig, types } from './testing';
 
@@ -106,5 +106,107 @@ describe('exchange', () => {
     if (prompt?.kind !== 'exchange') throw new Error('expected exchange prompt');
     expect(prompt.cards).toHaveLength(4);
     expect(prompt.cards[1]).toBe('duke');
+  });
+});
+
+describe('knownInDeck (private deck knowledge after an exchange)', () => {
+  const deckChars = (s: GameState): Character[] => s.deck.map((c) => c.character);
+  const contains = (pool: Character[], sub: Character[]): boolean => {
+    const left = pool.slice();
+    return sub.every((c) => {
+      const i = left.indexOf(c);
+      if (i < 0) return false;
+      left.splice(i, 1);
+      return true;
+    });
+  };
+
+  it('starts empty for everyone', () => {
+    const s = newGame(3);
+    expect(s.knownInDeck).toEqual({});
+    expect(toView(s, 'p0').knownInDeck).toEqual([]);
+    expect(toView(s, null).knownInDeck).toBeUndefined();
+  });
+
+  it('records the characters the actor returned, visible only to the actor', () => {
+    const { state } = exchanging();
+    const { state: after } = act(state, 'p0', keep(3, 2)); // keeps contessa + assassin, returns duke + captain
+    expect(after.knownInDeck).toEqual({ p0: ['duke', 'captain'] });
+    expect(contains(deckChars(after), ['duke', 'captain'])).toBe(true);
+    expect(toView(after, 'p0').knownInDeck).toEqual(['duke', 'captain']);
+    expect(toView(after, 'p1').knownInDeck).toEqual([]);
+    expect(toView(after, 'p2').knownInDeck).toEqual([]);
+    expect(toView(after, null).knownInDeck).toBeUndefined();
+    expect(JSON.stringify(toView(after, 'p1'))).not.toContain('"p0":[');
+    // A view is a detached copy.
+    toView(after, 'p0').knownInDeck?.push('contessa');
+    expect(after.knownInDeck).toEqual({ p0: ['duke', 'captain'] });
+  });
+
+  it('with one influence left: records the 2 returned of 3', () => {
+    const { state } = exchanging([0]);
+    const { state: after } = act(state, 'p0', keep(1)); // keeps contessa; returns captain + assassin
+    expect(after.knownInDeck).toEqual({ p0: ['captain', 'assassin'] });
+  });
+
+  it('survives moves that do not draw from the deck', () => {
+    const { state } = exchanging();
+    let s = act(state, 'p0', keep(3, 2)).state;
+    s = rig(s, { hands: { p1: ['captain', 'ambassador'] }, coins: { p2: 7 } });
+    const known = s.knownInDeck;
+    s = play(s, [
+      ['p1', { type: 'action', action: 'steal', targetId: 'p0' }],
+      ['p2', PASS],
+      ['p0', PASS],
+      ['p2', { type: 'action', action: 'coup', targetId: 'p1' }],
+      ['p1', reveal(0)],
+      ['p0', { type: 'action', action: 'income' }],
+    ]).state;
+    expect(s.knownInDeck).toEqual(known);
+    expect(toView(s, 'p0').knownInDeck).toEqual(['duke', 'captain']);
+  });
+
+  it('is cleared for everyone when another player draws for an exchange', () => {
+    const { state } = exchanging();
+    let s = act(state, 'p0', keep(3, 2)).state;
+    s = play(s, [
+      ['p1', EXCHANGE],
+      ['p2', PASS],
+      ['p0', PASS],
+    ]).state;
+    expect(s.phase.kind).toBe('exchange');
+    expect(s.knownInDeck).toEqual({});
+    expect(toView(s, 'p0').knownInDeck).toEqual([]);
+    const done = act(s, 'p1', getDefaultMove(s, 'p1') as Move).state;
+    expect(Object.keys(done.knownInDeck ?? {})).toEqual(['p1']);
+    expect(done.knownInDeck?.p1).toHaveLength(2);
+    expect(toView(done, 'p0').knownInDeck).toEqual([]);
+  });
+
+  it('is cleared for everyone when a proven card is replaced from the deck', () => {
+    const { state } = exchanging();
+    let s = act(state, 'p0', keep(3, 2)).state;
+    s = rig(s, { hands: { p1: ['duke', 'contessa'] } });
+    expect(s.knownInDeck).toEqual({ p0: ['duke', 'captain'] });
+    const { state: after, events } = play(s, [
+      ['p1', { type: 'action', action: 'tax' }],
+      ['p2', CHALLENGE],
+    ]);
+    expect(types(events)).toContain('card_replaced');
+    expect(after.knownInDeck).toEqual({});
+  });
+
+  it('is cleared by the actor’s own next exchange draw', () => {
+    const { state } = exchanging();
+    let s = act(state, 'p0', keep(3, 2)).state;
+    s = play(s, [
+      ['p1', { type: 'action', action: 'income' }],
+      ['p2', { type: 'action', action: 'income' }],
+      ['p0', EXCHANGE],
+      ['p1', PASS],
+      ['p2', PASS],
+    ]).state;
+    expect(s.phase.kind).toBe('exchange');
+    expect(s.knownInDeck).toEqual({});
   });
 });

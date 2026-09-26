@@ -3,31 +3,85 @@
  */
 import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@shared/protocol';
-import type { AvatarId, BotLevel, EmoteId, Move, RoomSettings } from '@shared/types';
-import { useGame } from '../store/useGame';
+import type { AvatarId, BotLevel, EmoteId, Move, RoomSettings, RoomView } from '@shared/types';
+import { translate } from '../i18n';
+import { useGame, type Profile } from '../store/useGame';
+import { errorKey } from '../ui/errors';
 import { emit } from './bus';
+import { hrefWithRoom, parseRoomLink, sanitizeCode } from './links';
 
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const LS_TOKEN = 'coup3d.token';
 
-function getToken(): string {
+/**
+ * How long an api call waits for its ack. Calls use `socket.timeout()`, so after this delay the
+ * emit is also dropped from the send buffer: a timed-out click can never fire later on reconnect.
+ */
+export const API_TIMEOUT_MS = 8000;
+
+/**
+ * After the first connect, how long to wait for the server to re-attach us to a seat (it pushes
+ * `room:state` right away) before using a rejoin link from the URL.
+ */
+export const ATTACH_SETTLE_MS = 500;
+
+// ───────────── Session token ─────────────
+
+let memToken: string | null = null;
+
+function randomToken(): string {
   try {
-    let t = localStorage.getItem(LS_TOKEN);
-    if (!t) {
-      t = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem(LS_TOKEN, t);
+    if (typeof crypto !== 'undefined') {
+      if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+      // crypto.randomUUID needs a secure context (https / localhost); LAN http has getRandomValues.
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
     }
-    return t;
   } catch {
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    /* fall through */
   }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * The session secret sent on every (re)connect. Read from localStorage once, then kept in memory,
+ * so it stays the same across reconnects even when storage is blocked (the seat can be resumed).
+ */
+export function getToken(): string {
+  if (memToken) return memToken;
+  let t: string | null = null;
+  try {
+    t = localStorage.getItem(LS_TOKEN);
+  } catch {
+    /* storage blocked */
+  }
+  if (!t) {
+    t = randomToken();
+    try {
+      localStorage.setItem(LS_TOKEN, t);
+    } catch {
+      /* memory only for this page */
+    }
+  }
+  memToken = t;
+  return t;
+}
+
+// ───────────── Connection ─────────────
+
 let socket: ClientSocket | null = null;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+let firstConnectSeen = false;
 
 export function connectSocket(): ClientSocket {
   if (socket) return socket;
+
+  // Capture the invite / rejoin link BEFORE connecting: the server may re-attach this token to
+  // another room, whose room:state would otherwise overwrite the invited code in the URL.
+  const link = parseRoomLink(currentHref());
+  if (link) useGame.setState({ invite: link });
+
   const s: ClientSocket = io({
     // A function so every (re)connect sends the room we currently believe we are in.
     auth: (cb) => cb({ token: getToken(), room: useGame.getState().room?.code }),
@@ -38,32 +92,48 @@ export function connectSocket(): ClientSocket {
   });
   socket = s;
 
-  s.on('connect', () => useGame.setState({ conn: 'connected' }));
-  s.on('disconnect', () => useGame.setState({ conn: 'reconnecting' }));
+  s.on('connect', () => {
+    useGame.setState({ conn: 'connected' });
+    if (firstConnectSeen) return;
+    firstConnectSeen = true;
+    const { invite, room } = useGame.getState();
+    if (invite?.key && !room) {
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        void tryRejoinLink();
+      }, ATTACH_SETTLE_MS);
+    }
+  });
+
+  s.on('disconnect', (reason) => {
+    if (reason === 'io server disconnect') {
+      // The server closed this socket on purpose (the session was opened in another tab). Socket.IO
+      // never reconnects after that: show the "play in this tab" panel instead of a banner that
+      // would say "reconnecting…" forever. The panel replaces the 'toast.replaced' toast.
+      useGame.setState((st) => ({
+        conn: 'replaced',
+        ui: { ...st.ui, toasts: st.ui.toasts.filter((x) => x.text !== 'toast.replaced') },
+      }));
+    } else {
+      useGame.setState({ conn: 'reconnecting' });
+    }
+  });
   s.io.on('reconnect_attempt', () => useGame.setState({ conn: 'reconnecting' }));
 
-  s.on('room:state', (room) => {
-    useGame.setState({ room });
-    syncRoomCodeToUrl(room.code);
-  });
-
-  s.on('room:closed', ({ reason }) => {
-    useGame.setState((st) => ({ room: null, game: null, ui: { ...st.ui, targeting: null } }));
-    syncRoomCodeToUrl(null);
-    if (reason === 'kicked') useGame.getState().toast('toast.kicked', 'error');
-    if (reason === 'replaced') useGame.getState().toast('toast.replaced', 'error');
-    if (reason === 'room_deleted') useGame.getState().toast('toast.roomDeleted', 'error');
-  });
+  s.on('room:state', onRoomState);
+  s.on('room:closed', onRoomClosed);
 
   s.on('game:state', ({ view, events, resync }) => {
     const clockOffset = view.serverNow ? view.serverNow - Date.now() : useGame.getState().clockOffset;
     useGame.setState((st) => {
-      // Drop target selection if we are no longer choosing an action.
-      const stillChoosing = view.prompt?.kind === 'choose_action';
+      // Keep target selection only while we are still choosing an action in the SAME phase. A
+      // resync or a new phaseSeq (e.g. reconnecting on a later turn) starts from a clean slate.
+      const keep =
+        !resync && view.prompt?.kind === 'choose_action' && st.game !== null && st.game.phaseSeq === view.phaseSeq;
       return {
         game: view,
         clockOffset,
-        ui: stillChoosing ? st.ui : { ...st.ui, targeting: null },
+        ui: keep || st.ui.targeting === null ? st.ui : { ...st.ui, targeting: null },
       };
     });
     if (!resync && events.length) emit('events', events);
@@ -78,12 +148,67 @@ export function connectSocket(): ClientSocket {
   return s;
 }
 
-function syncRoomCodeToUrl(code: string | null) {
+function onRoomState(room: RoomView): void {
+  cancelSettle(); // we are seated: a rejoin link must not pull us out of this room
+  const { invite } = useGame.getState();
+  const consumed = invite !== null && invite.code === room.code;
+  useGame.setState((st) => ({
+    room,
+    ...(consumed ? { invite: null } : {}),
+    // Back in the lobby (possibly while we were offline and missed game:cleared): drop the old game.
+    ...(room.status === 'lobby' && (st.game !== null || st.ui.targeting !== null)
+      ? { game: null, ui: { ...st.ui, targeting: null } }
+      : {}),
+  }));
+  // With a pending invite to ANOTHER room, leave the invited code in the URL until the player decides.
+  if (!invite || consumed) writeUrlRoom(room.code);
+}
+
+function onRoomClosed({ reason }: { reason: 'kicked' | 'left' | 'room_deleted' | 'replaced' | 'expired' }): void {
+  const st = useGame.getState();
+  let invite = st.invite;
+  // Removed for being offline too long: keep the code pre-filled on Home so they can join again.
+  if (!invite && reason === 'expired' && st.room) invite = { code: st.room.code };
+  writeUrlRoom(invite?.code ?? null);
+  useGame.setState((s) => ({ room: null, game: null, invite, ui: { ...s.ui, targeting: null } }));
+  const toast = useGame.getState().toast;
+  if (reason === 'kicked') toast('toast.kicked', 'error');
+  if (reason === 'replaced') toast('toast.replaced', 'error');
+  if (reason === 'room_deleted') toast('toast.roomDeleted', 'error');
+  if (reason === 'expired') toast('toast.expired', 'error');
+}
+
+function cancelSettle() {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = null;
+}
+
+/**
+ * "Play in this tab" after this tab was replaced: reconnect explicitly (this takes the session back
+ * from the other tab). Anything left in the send buffer is dropped first so no stale click replays.
+ */
+export function reconnectHere(): void {
+  const s = socket;
+  if (!s || s.connected) return;
+  s.sendBuffer = [];
+  useGame.setState({ conn: 'connecting' });
+  s.connect();
+}
+
+// ───────────── Room links (invite / rejoin) ─────────────
+
+function currentHref(): string {
   try {
-    const url = new URL(window.location.href);
-    if (code) url.searchParams.set('room', code);
-    else url.searchParams.delete('room');
-    window.history.replaceState(null, '', url.toString());
+    return window.location.href;
+  } catch {
+    return '';
+  }
+}
+
+function writeUrlRoom(code: string | null): void {
+  try {
+    const next = hrefWithRoom(window.location.href, code);
+    if (next !== window.location.href) window.history.replaceState(null, '', next);
   } catch {
     /* ignore */
   }
@@ -91,12 +216,73 @@ function syncRoomCodeToUrl(code: string | null) {
 
 /** Room code from `?room=XXXXX` (for share links). */
 export function roomCodeFromUrl(): string | null {
-  try {
-    return new URL(window.location.href).searchParams.get('room');
-  } catch {
-    return null;
-  }
+  return parseRoomLink(currentHref())?.code ?? null;
 }
+
+function joinName(profile: Profile, fallback?: string): string {
+  return profile.name.trim() || fallback || translate(useGame.getState().ui.lang, `avatar.${profile.avatar}`);
+}
+
+/**
+ * Opened with `/?room=CODE&key=KEY` and not seated anywhere: reclaim that seat. On failure, explain
+ * and fall back to the normal Home (the dead link is removed from the URL).
+ */
+async function tryRejoinLink(): Promise<void> {
+  const { invite, room, profile } = useGame.getState();
+  if (!invite?.key || room) return;
+  useGame.setState({ invite: { ...invite, joining: true } });
+  const res = await api.joinRoom(invite.code, joinName(profile), profile.avatar, invite.key);
+  if (res.ok) {
+    // room:state normally consumed the invite already; make sure the key does not linger.
+    const now = useGame.getState().invite;
+    if (now?.code === invite.code) useGame.setState({ invite: null });
+    writeUrlRoom(useGame.getState().room?.code ?? invite.code);
+    return;
+  }
+  if (useGame.getState().invite?.code === invite.code) useGame.setState({ invite: null });
+  if (!useGame.getState().room) writeUrlRoom(null);
+  useGame.getState().toast(errorKey(res.error), 'error');
+}
+
+/** Home: the player chose to create/join something themselves — forget the link. */
+export function clearInvite(): void {
+  if (useGame.getState().invite) useGame.setState({ invite: null });
+}
+
+/** Rejoin key from the link the page was opened with, if it is for `code`. */
+export function inviteKeyFor(code: string): string | undefined {
+  const inv = useGame.getState().invite;
+  return inv && inv.code === sanitizeCode(code) ? inv.key : undefined;
+}
+
+/** "Stay in OLD": drop the pending invite and show the current room in the URL again. */
+export function dismissInvite(): void {
+  useGame.setState({ invite: null });
+  writeUrlRoom(useGame.getState().room?.code ?? null);
+}
+
+/** "Leave OLD and join NEW": leave the room we are seated in, then join the invited one. */
+export async function acceptInvite(): Promise<ApiResult<{ code: string }>> {
+  const { invite, room, profile } = useGame.getState();
+  if (!invite) return { ok: false, error: 'bad_request' };
+  const oldName = room?.players.find((p) => p.id === room.youId)?.name;
+  if (room) {
+    const left = await api.leaveRoom();
+    if (!left.ok && left.error !== 'not_in_room') return left;
+  }
+  const res = await api.joinRoom(invite.code, joinName(profile, oldName), profile.avatar, invite.key);
+  if (!res.ok) {
+    // Stay on Home with the invited code pre-filled (a rejected key is not offered again).
+    const keep = res.error === 'bad_rejoin_key' ? { code: invite.code } : { code: invite.code, key: invite.key };
+    if (!useGame.getState().room) {
+      useGame.setState({ invite: keep });
+      writeUrlRoom(invite.code);
+    }
+  }
+  return res;
+}
+
+// ───────────── API ─────────────
 
 export type ApiResult<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -109,37 +295,47 @@ export function setMockHandler(fn: typeof mockHandler) {
   mockHandler = fn;
 }
 
-function call<T = {}>(
-  fn: (s: ClientSocket, ack: (r: ApiResult<T>) => void) => void,
-  mock?: [string, unknown],
-): Promise<ApiResult<T>> {
+/** Error-first ack used with `socket.timeout()`. */
+type TimedAck<T> = (err: Error | null, res?: ApiResult<T>) => void;
+
+/**
+ * Client-side failures:
+ * - not_connected: the socket is dead (replaced by another tab) — nothing was sent or buffered.
+ * - timeout: no ack within API_TIMEOUT_MS (the emit was dropped from the buffer).
+ * - disconnected: the connection dropped after sending; the server may or may not have applied it.
+ */
+function call<T = {}>(send: (s: ClientSocket, ack: TimedAck<T>) => void, mock?: [string, unknown]): Promise<ApiResult<T>> {
   if (mockHandler) return Promise.resolve(mockHandler(mock?.[0] ?? 'unknown', mock?.[1]) as ApiResult<T>);
   const s = connectSocket();
+  // A server-closed socket never reconnects by itself: fail now instead of buffering an emit that
+  // a later manual reconnect would replay (e.g. a room:create that pulls the other tab out of its room).
+  if (!s.connected && !s.active) return Promise.resolve({ ok: false, error: 'not_connected' });
   return new Promise((resolve) => {
-    let done = false;
-    const timer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        resolve({ ok: false, error: 'timeout' });
-      }
-    }, 8000);
-    fn(s, (r) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      resolve(r);
+    send(s.timeout(API_TIMEOUT_MS) as unknown as ClientSocket, (err, res) => {
+      if (err) resolve({ ok: false, error: /timed out/i.test(err.message) ? 'timeout' : 'disconnected' });
+      else resolve(res ?? { ok: false, error: 'unknown' });
     });
   });
+}
+
+/**
+ * Whether a failed move deserves the "rejected" toast + shake. Not when the connection dropped
+ * (the banner already says so) or when it timed out but the game has moved on since (a resync).
+ */
+export function shouldReportMoveError(error: string, sentPhaseSeq: number, currentPhaseSeq: number | null): boolean {
+  if (error === 'disconnected' || error === 'not_connected') return false;
+  if (error === 'timeout' && currentPhaseSeq !== sentPhaseSeq) return false;
+  return true;
 }
 
 export const api = {
   createRoom: (name: string, avatar?: AvatarId) =>
     call<{ code: string }>((s, ack) => s.emit('room:create', { name, avatar }, ack as never), ['room:create', { name, avatar }]),
-  joinRoom: (code: string, name: string, avatar?: AvatarId) =>
-    call<{ code: string }>(
-      (s, ack) => s.emit('room:join', { code: code.toUpperCase().trim(), name, avatar }, ack as never),
-      ['room:join', { code, name, avatar }],
-    ),
+  /** `rejoinKey` reclaims your own seat in a running game (from a rejoin link); ignored in the lobby. */
+  joinRoom: (code: string, name: string, avatar?: AvatarId, rejoinKey?: string) => {
+    const payload = { code: code.toUpperCase().trim(), name, avatar, ...(rejoinKey ? { rejoinKey } : {}) };
+    return call<{ code: string }>((s, ack) => s.emit('room:join', payload, ack as never), ['room:join', payload]);
+  },
   leaveRoom: () => call((s, ack) => s.emit('room:leave', ack as never), ['room:leave', null]),
   updatePlayer: (p: { name?: string; avatar?: AvatarId }) => call((s, ack) => s.emit('player:update', p, ack as never), ['player:update', p]),
   addBot: (level: BotLevel) => call((s, ack) => s.emit('room:addBot', { level }, ack as never), ['room:addBot', { level }]),
@@ -151,11 +347,14 @@ export const api = {
   async move(move: Move): Promise<ApiResult> {
     const g = useGame.getState().game;
     if (!g) return { ok: false, error: 'no_game' };
+    const phaseSeq = g.phaseSeq;
     const res = await call(
-      (s, ack) => s.emit('game:move', { move, phaseSeq: g.phaseSeq }, ack as never),
-      ['game:move', { move, phaseSeq: g.phaseSeq }],
+      (s, ack) => s.emit('game:move', { move, phaseSeq }, ack as never),
+      ['game:move', { move, phaseSeq }],
     );
-    if (!res.ok) emit('moveRejected', { error: res.error });
+    if (!res.ok && shouldReportMoveError(res.error, phaseSeq, useGame.getState().game?.phaseSeq ?? null)) {
+      emit('moveRejected', { error: res.error });
+    }
     return res;
   },
   emote: (emote: EmoteId) => {
@@ -163,6 +362,8 @@ export const api = {
       mockHandler('game:emote', { emote });
       return;
     }
-    connectSocket().emit('game:emote', { emote });
+    // Emotes are fleeting: drop them while offline instead of replaying them after a reconnect.
+    const s = connectSocket();
+    if (s.connected) s.emit('game:emote', { emote });
   },
 };

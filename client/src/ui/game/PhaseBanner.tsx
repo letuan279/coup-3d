@@ -6,7 +6,7 @@ import { Avatar } from '../common/Avatar';
 import { Countdown } from '../common/Countdown';
 import { RichText } from '../common/RichText';
 import { useAvatarOf, useSelfId } from '../hooks';
-import { describePhase, joinNames, pendingDeciders } from './phaseText';
+import { blockDuringActionWindow, describePhase, joinNames, pendingDeciders } from './phaseText';
 
 /** Top-centre banner: what is happening right now + countdown (ticks in the last 5s of your decision). */
 export const PhaseBanner = memo(function PhaseBanner() {
@@ -25,7 +25,7 @@ export const PhaseBanner = memo(function PhaseBanner() {
         ? 'win'
         : game.phase.kind === 'lose_influence'
           ? 'danger'
-          : game.phase.kind === 'block_response'
+          : game.phase.kind === 'block_response' || blockDuringActionWindow(game)
             ? 'block'
             : yourCall
               ? 'mine'

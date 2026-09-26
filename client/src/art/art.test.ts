@@ -13,6 +13,7 @@ import {
   getCharacterIconUrl,
 } from './cardArt';
 import { getAvatarCanvas, getAvatarUrl } from './avatars';
+import { artVersion, onArtRefresh, refreshArt } from './refresh';
 
 /** Monospace-ish fake metrics: every char is half the font size wide. */
 const measure: Measure = (text, size) => text.length * size * 0.5;
@@ -86,6 +87,9 @@ class FakePath2D {
   }
 }
 
+/** How many times each context method was called (all fake canvases together). */
+const ctxCalls = new Map<string, number>();
+
 function fakeContext(): CanvasRenderingContext2D {
   const state: Record<string | symbol, unknown> = {};
   const fontSize = () => Number(/(\d+(?:\.\d+)?)px/.exec(String(state.font ?? '10px'))?.[1] ?? 10);
@@ -102,7 +106,10 @@ function fakeContext(): CanvasRenderingContext2D {
     get: (_t, prop) => {
       if (typeof prop === 'string' && special[prop]) return special[prop];
       if (prop in state) return state[prop];
-      return (...args: unknown[]) => checkArgs(`ctx.${String(prop)}`, args);
+      return (...args: unknown[]) => {
+        ctxCalls.set(String(prop), (ctxCalls.get(String(prop)) ?? 0) + 1);
+        checkArgs(`ctx.${String(prop)}`, args);
+      };
     },
     set: (_t, prop, value) => {
       checkArgs(`ctx.${String(prop)} =`, [value]);
@@ -113,6 +120,7 @@ function fakeContext(): CanvasRenderingContext2D {
 }
 
 let canvasesCreated = 0;
+let dataUrls = 0;
 
 beforeAll(() => {
   vi.stubGlobal('Path2D', FakePath2D);
@@ -121,7 +129,7 @@ beforeAll(() => {
       expect(tag).toBe('canvas');
       canvasesCreated++;
       const ctx = fakeContext();
-      return { width: 0, height: 0, getContext: () => ctx, toDataURL: () => `data:image/png;base64,${canvasesCreated}` };
+      return { width: 0, height: 0, getContext: () => ctx, toDataURL: () => `data:image/png;base64,${++dataUrls}` };
     },
   });
 });
@@ -160,5 +168,40 @@ describe('procedural art (fake canvas)', () => {
     expect(getCharacterIconUrl('assassin')).toBe(getCharacterIconUrl('assassin'));
     expect(getAvatarUrl('frog')).toBe(getAvatarUrl('frog'));
     expect(canvasesCreated).toBe(before);
+  });
+});
+
+describe('art refresh (web fonts arriving late)', () => {
+  it('redraws the text-bearing canvases in place and regenerates their data URLs', () => {
+    const face = getCardFaceCanvas('duke', 'vi');
+    const back = getCardBackCanvas();
+    const icon = getCharacterIconCanvas('duke');
+    const faceUrl = getCardFaceUrl('duke', 'vi');
+    const backUrl = getCardBackUrl();
+    const iconUrl = getCharacterIconUrl('duke');
+    const created = canvasesCreated;
+    const texts = ctxCalls.get('fillText') ?? 0;
+    const heard: number[] = [];
+    const off = onArtRefresh(() => heard.push(artVersion()));
+    const v0 = artVersion();
+
+    refreshArt();
+
+    // Same canvas objects (textures built on them stay valid), drawn again: text included.
+    expect(getCardFaceCanvas('duke', 'vi')).toBe(face);
+    expect(getCardBackCanvas()).toBe(back);
+    expect(getCharacterIconCanvas('duke')).toBe(icon);
+    expect(canvasesCreated).toBe(created);
+    expect(ctxCalls.get('fillText') ?? 0).toBeGreaterThan(texts);
+    // Fresh data URLs for the redrawn art; emblems have no text and keep theirs.
+    expect(getCardFaceUrl('duke', 'vi')).not.toBe(faceUrl);
+    expect(getCardBackUrl()).not.toBe(backUrl);
+    expect(getCharacterIconUrl('duke')).toBe(iconUrl);
+    expect(heard).toEqual([v0 + 1]);
+    expect(problems).toEqual([]);
+
+    off();
+    refreshArt();
+    expect(heard).toEqual([v0 + 1]);
   });
 });

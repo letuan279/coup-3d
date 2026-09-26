@@ -62,7 +62,7 @@ function withBlockHabit(S: Situation, p: PlayerIntel, action: ActionType, pBlock
 /** Probability that `p` stops an assassination with a Contessa (real, or a desperate bluff). */
 function contessaBlockChance(S: Situation, p: PlayerIntel): number {
   const real = holdProbability(S.K, p.id, 'contessa', S.depth);
-  const bluff = S.K.unseen.contessa <= 0 && S.level !== 'easy' ? 0.05 : p.hidden === 1 ? 0.45 : 0.12;
+  const bluff = S.K.inHands.contessa <= 0 && S.level !== 'easy' ? 0.05 : p.hidden === 1 ? 0.45 : 0.12;
   return withBlockHabit(S, p, 'assassinate', real + (1 - real) * bluff);
 }
 

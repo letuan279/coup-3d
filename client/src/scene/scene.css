@@ -171,6 +171,21 @@
   opacity: 0.75;
 }
 
+/* A revealed card: the character's round emblem (its colour is the main cue at this size). */
+.sc-pips i.is-shown {
+  width: 17px;
+  height: 17px;
+  margin: -2px 0;
+  border: none;
+  border-radius: 50%;
+  background-color: transparent;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  opacity: 1;
+  filter: saturate(0.9);
+}
+
 .sc-plate__badges {
   display: flex;
   gap: 4px;

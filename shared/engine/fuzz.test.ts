@@ -48,6 +48,31 @@ function checkState(s: GameState): string | null {
     if (!alive.some((p) => p.id === s.actorId) && s.phase.kind === 'turn') return 'dead actor has the turn';
   }
 
+  const phase = s.phase;
+  if (phase.kind === 'block_response' && !s.pendingBlock) return 'block_response without a pending block';
+  if ((phase.kind === 'turn' || phase.kind === 'exchange' || phase.kind === 'game_over') && s.pendingBlock) {
+    return `pending block in ${phase.kind}`;
+  }
+  if (phase.kind === 'action_response' && s.pendingBlock) {
+    // Only the kept-open window of a challengeable action (SPEC §1.1) carries a block.
+    if (!phase.canChallenge) return 'pending block in an unchallengeable action window';
+    if (!phase.passed.includes(s.pendingBlock.blockerId)) return 'blocker still has to answer the action';
+    if (phase.responders.every((id) => phase.passed.includes(id))) return 'action window left open with nobody to answer';
+  }
+
+  // Deck knowledge is provably correct: at most one entry (the last exchanger's), all still in the deck.
+  const known = Object.entries(s.knownInDeck ?? {});
+  if (known.length > 1) return `knownInDeck has ${known.length} entries`;
+  if (phase.kind === 'exchange' && known.length > 0) return 'knownInDeck survived an exchange draw';
+  for (const [id, chars] of known) {
+    const deck = s.deck.map((c) => c.character);
+    for (const c of chars) {
+      const i = deck.indexOf(c);
+      if (i < 0) return `${id} believes a ${c} is in the deck but it is not`;
+      deck.splice(i, 1);
+    }
+  }
+
   for (let i = 1; i < s.log.length; i++) {
     if (s.log[i].seq !== s.log[i - 1].seq + 1) return 'log seq gap';
   }
@@ -105,9 +130,14 @@ function checkRedaction(s: GameState): string | null {
       }
     }
     if (view.phase.kind === 'exchange' && viewer !== s.actorId && view.prompt !== null) return 'exchange prompt leaked';
+    const ownKnown = viewer === null ? undefined : (s.knownInDeck?.[viewer] ?? []);
+    if (JSON.stringify(view.knownInDeck) !== JSON.stringify(ownKnown)) return `knownInDeck of ${viewer} wrong/leaked`;
   }
   return null;
 }
+
+/** How often the SPEC §1.1 "block while the action window stays open" paths were exercised. */
+const coverage = { keptOpen: 0, actionChallengedWithBlock: 0, blockAfterKeptOpen: 0, knownInDeckSet: 0 };
 
 function playRandomGame(gameIndex: number): { moves: number; state: GameState } {
   const rand = createRng(0x5eed + gameIndex * 7919);
@@ -148,7 +178,14 @@ function playRandomGame(gameIndex: number): { moves: number; state: GameState } 
       (checkViews ? checkRedaction(res.state) : null);
     if (problem) throw new Error(`game ${gameIndex} move ${moves} (${playerId} ${JSON.stringify(move)}): ${problem}`);
     if (auto && res.events[0].type !== 'timeout') throw new Error('auto move without a timeout event');
-    s = res.state;
+    const next = res.state;
+    if (next.phase.kind === 'action_response' && next.pendingBlock && !s.pendingBlock) coverage.keptOpen++;
+    if (s.phase.kind === 'action_response' && s.pendingBlock) {
+      if (move.type === 'challenge') coverage.actionChallengedWithBlock++;
+      else if (next.phase.kind === 'block_response') coverage.blockAfterKeptOpen++;
+    }
+    if (Object.keys(next.knownInDeck ?? {}).length > Object.keys(s.knownInDeck ?? {}).length) coverage.knownInDeckSet++;
+    s = next;
   }
   const outcomes = checkOutcomes(s);
   if (outcomes) throw new Error(`game ${gameIndex}: ${outcomes}`);
@@ -169,6 +206,7 @@ describe('fuzz: random legal games', () => {
     const elapsed = performance.now() - started;
     expect([...winnersBySize.keys()].sort()).toEqual([2, 3, 4, 5, 6]);
     expect(totalMoves).toBeGreaterThan(GAMES * 5);
+    for (const [path, count] of Object.entries(coverage)) expect(count, path).toBeGreaterThan(50);
     // Average cost per move including invariant checks — a loose guard against regressions.
     expect(elapsed / totalMoves).toBeLessThan(1);
   });

@@ -2,7 +2,7 @@
  * What a bot knows: card counting from its own seat plus a claim history per player rebuilt
  * from the public log. Everything is derived from a GameView, so the bot stays stateless.
  */
-import { CARDS_PER_CHARACTER } from '../constants';
+import { CARDS_PER_CHARACTER, COUP_COST } from '../constants';
 import { CHARACTERS } from '../types';
 import type { ActionType, Character, GameView, LoggedEvent } from '../types';
 import type { BeliefDepth } from './personality';
@@ -43,12 +43,28 @@ export interface PlayerIntel {
   wrongChallenges: number;
   /** Challengeable claims by others this player could have challenged. */
   challengeChances: number;
+  /**
+   * The same, restricted to claims that hit this player directly (aimed at them, blocking them,
+   * or heads-up): where a rational player is most tempted to challenge.
+   */
+  hotChances: number;
+  hotChallenges: number;
   /** Turn on which this player last proved each character (card went back to the deck). */
   provenTurn: Partial<Record<Character, number>>;
   /** Every block this player made (behaviour — survives hand changes). */
   blocks: { action: ActionType; turn: number }[];
+  /** Blockable actions this player let through when a block was worth making (survives hand changes). */
+  declinedBlocks: number;
   /** Turn of this player's latest declared action of each type. */
   lastActionTurn: Partial<Record<ActionType, number>>;
+  /**
+   * Took Income / Foreign Aid / Steal / Exchange with under 7 coins since the hand last changed,
+   * when Tax was there for the taking (anti-coup steals excluded): a public hint of "no Duke".
+   */
+  declinedTax: boolean;
+  /** Contessa blocks of this player's own assassinations / how many of them it challenged. */
+  contessaChallengeChances: number;
+  contessaChallenges: number;
 }
 
 export interface Knowledge {
@@ -59,10 +75,19 @@ export interface Knowledge {
   /** Face-up cards on the table. */
   revealed: CharCounts;
   revealedTotal: number;
-  /** Copies the bot cannot see anywhere: 3 − revealed − own. */
+  /**
+   * Copies the bot cannot see anywhere: 3 − revealed − own. This is also what the table can reason
+   * about publicly; use `inHands` for what opponents can actually hold.
+   */
   unseen: CharCounts;
   /** Cards the bot cannot see: deck + other players' hidden cards. */
   pool: number;
+  /** Copies the bot itself returned to the deck with its last Exchange, still provably there (private). */
+  knownInDeck: CharCounts;
+  /** Copies that can be in an opponent's hand: `unseen` − `knownInDeck`. 0 → any claim of it is false. */
+  inHands: CharCounts;
+  /** Cards the bot cannot place: `pool` minus the known deck cards (what opponents' hands are drawn from). */
+  handPool: number;
   players: Map<string, PlayerIntel>;
   self: PlayerIntel;
   /** Living opponents in seat order. */
@@ -76,6 +101,7 @@ function resetHand(p: PlayerIntel): void {
   p.claims = [];
   p.lacks.clear();
   p.soft = oneCounts();
+  p.declinedTax = false;
 }
 
 function dropClaims(p: PlayerIntel, c: Character): void {
@@ -83,13 +109,44 @@ function dropClaims(p: PlayerIntel, c: Character): void {
 }
 
 /**
+ * Coin balances at the start of `log`: the current balances minus every logged transfer. Exact
+ * for a truncated log too, since the retained tail holds every transfer made after its start.
+ */
+function startingCoins(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>): Map<string, number> {
+  const coins = new Map<string, number>();
+  for (const p of players.values()) coins.set(p.id, p.coins);
+  for (const ev of log) {
+    if (ev.type !== 'coins') continue;
+    if (coins.has(ev.from)) coins.set(ev.from, coins.get(ev.from)! + ev.amount);
+    if (coins.has(ev.to)) coins.set(ev.to, coins.get(ev.to)! - ev.amount);
+  }
+  return coins;
+}
+
+/** Actions a player with a Duke and under 7 coins would rarely pick over Tax. */
+const TAX_ALTERNATIVES: ReadonlySet<ActionType> = new Set(['income', 'foreign_aid', 'steal', 'exchange']);
+
+/**
  * Folds the public log into per-player intel. Tolerates truncated or partial logs. Returns the
  * turn of the latest influence loss (or of the oldest logged event when there was none).
  */
 function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>): number {
-  const alive = new Set(players.keys());
+  // Alive when the log starts: alive now, or eliminated within the log.
+  const alive = new Set<string>();
+  for (const p of players.values()) if (p.alive) alive.add(p.id);
+  for (const ev of log) if (ev.type === 'eliminated' && players.has(ev.playerId)) alive.add(ev.playerId);
   let lastLossTurn = log.length > 0 ? log[0].turn : 0;
-  let lastStealAmount: number | null = null;
+  /** Coins the target of the pending steal had when it was declared. */
+  let stealTargetCoins = 0;
+  /** Players who blocked the pending action. */
+  const blockedThis = new Set<string>();
+  /** Who the latest action claim / block claim hit directly (see PlayerIntel.hotChances). */
+  let actionHot = new Set<string>();
+  let blockHot = new Set<string>();
+  /** The player whose action the latest block stopped. */
+  let lastBlockActor = '';
+  const coins = startingCoins(log, players);
+  const coinsOf = (id: string | undefined): number => (id === undefined ? 0 : (coins.get(id) ?? 0));
   const others = (id: string): PlayerIntel[] => {
     const out: PlayerIntel[] = [];
     for (const pid of alive) if (pid !== id) out.push(players.get(pid)!);
@@ -99,24 +156,53 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
   for (const ev of log) {
     switch (ev.type) {
       case 'action': {
-        lastStealAmount = null;
+        stealTargetCoins = ev.action === 'steal' ? coinsOf(ev.targetId) : 0;
+        blockedThis.clear();
         const actor = players.get(ev.actorId);
-        if (actor) actor.lastActionTurn[ev.action] = ev.turn;
+        if (actor) {
+          actor.lastActionTurn[ev.action] = ev.turn;
+          // Stealing a rival back below coup range is a reason of its own, not a missing Duke.
+          const antiCoup = ev.action === 'steal' && coinsOf(ev.targetId) >= COUP_COST;
+          if (TAX_ALTERNATIVES.has(ev.action) && coinsOf(ev.actorId) < COUP_COST && !antiCoup) {
+            actor.declinedTax = true;
+          }
+        }
         if (!ev.claim) break;
         actor?.claims.push({ character: ev.claim, seq: ev.seq, turn: ev.turn, via: 'action' });
-        for (const o of others(ev.actorId)) o.challengeChances++;
+        actionHot = new Set();
+        for (const o of others(ev.actorId)) {
+          o.challengeChances++;
+          if (alive.size <= 2 || ev.targetId === o.id) {
+            o.hotChances++;
+            actionHot.add(o.id);
+          }
+        }
         break;
       }
       case 'block': {
         const blocker = players.get(ev.blockerId);
         blocker?.claims.push({ character: ev.character, seq: ev.seq, turn: ev.turn, via: 'block' });
         blocker?.blocks.push({ action: ev.action, turn: ev.turn });
-        for (const o of others(ev.blockerId)) o.challengeChances++;
+        blockedThis.add(ev.blockerId);
+        blockHot = new Set();
+        lastBlockActor = ev.actorId;
+        for (const o of others(ev.blockerId)) {
+          o.challengeChances++;
+          if (ev.character === 'contessa' && ev.actorId === o.id) o.contessaChallengeChances++;
+          if (alive.size <= 2 || ev.actorId === o.id) {
+            o.hotChances++;
+            blockHot.add(o.id);
+          }
+        }
         break;
       }
       case 'challenge': {
         const c = players.get(ev.challengerId);
-        if (c) c.challengesMade++;
+        if (c) {
+          c.challengesMade++;
+          if ((ev.against === 'block' ? blockHot : actionHot).has(c.id)) c.hotChallenges++;
+          if (ev.against === 'block' && ev.character === 'contessa' && lastBlockActor === c.id) c.contessaChallenges++;
+        }
         break;
       }
       case 'challenge_result': {
@@ -139,6 +225,7 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
         dropClaims(p, ev.character);
         p.lacks.clear();
         p.soft = oneCounts();
+        p.declinedTax = false;
         p.provenTurn[ev.character] = ev.turn;
         break;
       }
@@ -155,22 +242,32 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
         break;
       }
       case 'coins': {
-        if (ev.reason === 'steal') lastStealAmount = ev.amount;
+        if (coins.has(ev.from)) coins.set(ev.from, coins.get(ev.from)! - ev.amount);
+        if (coins.has(ev.to)) coins.set(ev.to, coins.get(ev.to)! + ev.amount);
         break;
       }
       case 'action_resolved': {
-        // Letting an action through is (soft) evidence of not holding its blockers.
-        if (ev.action === 'steal' && ev.targetId && lastStealAmount !== 0) {
-          const t = players.get(ev.targetId);
+        // Letting an action through is (soft) evidence of not holding its blockers — but nobody
+        // bothers to block a steal that takes nothing (and one coin is barely worth a block).
+        if (ev.action === 'steal') {
+          const t = ev.targetId ? players.get(ev.targetId) : undefined;
+          const f = stealTargetCoins >= 2 ? 0.55 : stealTargetCoins === 1 ? 0.8 : 1;
           if (t) {
-            t.soft.captain *= 0.55;
-            t.soft.ambassador *= 0.55;
+            t.soft.captain *= f;
+            t.soft.ambassador *= f;
+            if (stealTargetCoins >= 2 && !blockedThis.has(t.id)) t.declinedBlocks++;
           }
         } else if (ev.action === 'assassinate' && ev.targetId) {
           const t = players.get(ev.targetId);
-          if (t) t.soft.contessa *= 0.3;
+          if (t) {
+            t.soft.contessa *= 0.3;
+            if (!blockedThis.has(t.id)) t.declinedBlocks++;
+          }
         } else if (ev.action === 'foreign_aid') {
-          for (const o of others(ev.actorId)) o.soft.duke *= 0.8;
+          for (const o of others(ev.actorId)) {
+            o.soft.duke *= 0.8;
+            if (!blockedThis.has(o.id)) o.declinedBlocks++;
+          }
         }
         break;
       }
@@ -222,9 +319,15 @@ export function buildKnowledge(view: GameView, ownOverride?: readonly Character[
       challengesMade: 0,
       wrongChallenges: 0,
       challengeChances: 0,
+      hotChances: 0,
+      hotChallenges: 0,
       provenTurn: {},
       blocks: [],
+      declinedBlocks: 0,
       lastActionTurn: {},
+      declinedTax: false,
+      contessaChallengeChances: 0,
+      contessaChallenges: 0,
     });
   }
   if (ownOverride) own = ownOverride.slice();
@@ -235,6 +338,16 @@ export function buildKnowledge(view: GameView, ownOverride?: readonly Character[
   for (const c of own) ownCounts[c]++;
   const unseen = zeroCounts();
   for (const c of CHARACTERS) unseen[c] = Math.max(0, CARDS_PER_CHARACTER - revealed[c] - ownCounts[c]);
+  // Private memory from the bot's own last Exchange (cleared by the engine on any later draw).
+  const knownInDeck = zeroCounts();
+  for (const c of view.knownInDeck ?? []) if ((CHARACTERS as readonly string[]).includes(c)) knownInDeck[c]++;
+  const inHands = zeroCounts();
+  let knownTotal = 0;
+  for (const c of CHARACTERS) {
+    knownInDeck[c] = Math.min(knownInDeck[c], unseen[c]);
+    knownTotal += knownInDeck[c];
+    inHands[c] = unseen[c] - knownInDeck[c];
+  }
 
   let self = players.get(selfId);
   if (!self) {
@@ -254,14 +367,21 @@ export function buildKnowledge(view: GameView, ownOverride?: readonly Character[
       challengesMade: 0,
       wrongChallenges: 0,
       challengeChances: 0,
+      hotChances: 0,
+      hotChallenges: 0,
       provenTurn: {},
       blocks: [],
+      declinedBlocks: 0,
       lastActionTurn: {},
+      declinedTax: false,
+      contessaChallengeChances: 0,
+      contessaChallenges: 0,
     };
   }
   const opponents = [...players.values()].filter((p) => p.id !== selfId && p.alive).sort((a, b) => a.seat - b.seat);
   const othersHidden = opponents.reduce((n, p) => n + p.hidden, 0);
   const pool = Math.max(othersHidden, CHARACTERS.length * CARDS_PER_CHARACTER - revealedTotal - own.length);
+  const handPool = Math.max(othersHidden, pool - knownTotal);
 
   const quietTurns = Math.max(0, view.turn - lastLossTurn);
   return {
@@ -272,6 +392,9 @@ export function buildKnowledge(view: GameView, ownOverride?: readonly Character[
     revealedTotal,
     unseen,
     pool,
+    knownInDeck,
+    inHands,
+    handPool,
     players,
     self,
     opponents,
@@ -326,6 +449,8 @@ function currentClaimLr(c: Character, hidden: number, q: HoldQuery, depth: Belie
   if (hidden > 1) return many;
   return depth.history ? one * LAST_CARD_SHARPNESS : one;
 }
+/** Odds multiplier on holding a Duke for a player who declined Tax with the current hand. */
+const DECLINED_TAX_DUKE = 0.4;
 const FIRST_PAST_CLAIM_LR = 1.7;
 const REPEAT_CLAIM_LR = 1.3;
 /** Repeated unchallenged claims never make a bot fully sure — bluffers exist. */
@@ -345,9 +470,12 @@ export function hasClaimed(p: PlayerIntel, c: Character): boolean {
   return p.claims.some((r) => r.character === c);
 }
 
-/** The claim is impossible: every copy is visible to the bot, or the player was caught lacking it. */
+/**
+ * The claim is impossible: every copy is visible to the bot or known to be in the deck, or the
+ * player was caught lacking it.
+ */
 export function isCertainBluff(K: Knowledge, playerId: string, c: Character, depth: BeliefDepth): boolean {
-  if (K.unseen[c] <= 0) return true;
+  if (K.inHands[c] <= 0) return true;
   const p = K.players.get(playerId);
   return !!p && depth.lacks && p.lacks.has(c);
 }
@@ -388,6 +516,8 @@ export function posteriorFromPrior(
   odds *= lr;
 
   if (depth.soft) odds *= p.soft[c];
+  // Took something else over Tax with this hand: most players holding a Duke would have taxed.
+  if (depth.soft && c === 'duke' && p.declinedTax) odds *= DECLINED_TAX_DUKE;
 
   if (depth.inconsistency) {
     const distinct = new Set(past.map((r) => r.character));
@@ -412,9 +542,9 @@ export function holdProbability(
   q: HoldQuery = {},
 ): number {
   const p = K.players.get(playerId);
-  if (!p || p.hidden <= 0 || K.unseen[c] <= 0) return 0;
+  if (!p || p.hidden <= 0 || K.inHands[c] <= 0) return 0;
   if (depth.lacks && p.lacks.has(c)) return 0;
-  return posteriorFromPrior(pAtLeastOne(K.pool, K.unseen[c], p.hidden), p, c, depth, q);
+  return posteriorFromPrior(pAtLeastOne(K.handPool, K.inHands[c], p.hidden), p, c, depth, q);
 }
 
 /** P(exactly `k` successes) drawing `draws` from `pool` cards holding `copies` successes. */
@@ -433,6 +563,32 @@ function choose(n: number, k: number): number {
 /** Observed willingness to challenge, shrunk towards a low prior (most players rarely challenge). */
 export function challengeTendency(p: PlayerIntel): number {
   return (p.challengesMade + 0.2) / (p.challengeChances + 6);
+}
+
+/** Observed willingness to challenge claims that hit the player directly, shrunk towards `prior`. */
+export function hotChallengeTendency(p: PlayerIntel, prior: number): number {
+  return (p.hotChallenges + 2 * prior) / (p.hotChances + 2);
+}
+
+/** Share of players who block whatever they hold, before seeing any of their blocks. */
+const HABIT_PRIOR = 0.1;
+/** How often a typical two-card player really holds a blocker for each blockable action. */
+const TYPICAL_BLOCK: Partial<Record<ActionType, number>> = { steal: 0.6, assassinate: 0.4, foreign_aid: 0.4 };
+
+/**
+ * Probability that `p` is an "always block" player — one whose blocks say nothing about their
+ * cards. Blocking several different kinds of action without ever letting one through is what
+ * gives it away (a real blocker only covers what its two cards cover). Declining a single
+ * worthwhile block rules it out.
+ */
+export function blockHabit(p: PlayerIntel): number {
+  if (p.declinedBlocks > 0) return 0;
+  const kinds = new Set(p.blocks.map((b) => b.action));
+  if (kinds.size < 2) return 0;
+  let odds = HABIT_PRIOR / (1 - HABIT_PRIOR);
+  for (const k of kinds) odds /= TYPICAL_BLOCK[k] ?? 1;
+  odds *= 1.15 ** Math.min(4, p.blocks.length - kinds.size);
+  return odds / (1 + odds);
 }
 
 /** Blocks of `action` that `p` made within the last `turns` turns. */

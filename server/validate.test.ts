@@ -8,6 +8,7 @@ import {
   parseMove,
   parseMovePayload,
   parseName,
+  parseRejoinKey,
   parseSettingsPayload,
   parseToken,
   parseUpdatePayload,
@@ -32,6 +33,39 @@ describe('validate', () => {
     for (const bad of ['', '   ', 'x'.repeat(17), 5, null, {}, 'a'.repeat(100)]) {
       expect(() => parseName(bad)).toThrow(BadRequest);
     }
+  });
+
+  it('validates the optional rejoin key (base64url, ≤ 64 chars)', () => {
+    for (const absent of [undefined, null, '']) expect(parseRejoinKey(absent)).toBeUndefined();
+    expect(parseRejoinKey('aB3_-xYz09QwErTy')).toBe('aB3_-xYz09QwErTy');
+    expect(parseRejoinKey('  aB3_-xYz09QwErTy ')).toBe('aB3_-xYz09QwErTy');
+    // Well-formed but wrong-length keys are the room's call (bad_rejoin_key), not a bad request.
+    expect(parseRejoinKey('aB3')).toBe('aB3');
+    for (const bad of [123, {}, [], true, '   ', 'has space', 'key+with/slash=', 'ключ', 'x'.repeat(65)]) {
+      expect(() => parseRejoinKey(bad)).toThrow(BadRequest);
+    }
+  });
+
+  it('parses room:join with a rejoin key: the profile becomes optional', () => {
+    expect(parseJoinPayload({ code: 'abcde', rejoinKey: 'aB3_-xYz09QwErTy' })).toEqual({
+      code: 'ABCDE',
+      rejoinKey: 'aB3_-xYz09QwErTy',
+    });
+    expect(parseJoinPayload({ code: 'ABCDE', name: ' An ', avatar: 'fox', rejoinKey: 'k3y' })).toEqual({
+      code: 'ABCDE',
+      name: 'An',
+      avatar: 'fox',
+      rejoinKey: 'k3y',
+    });
+    // An invalid profile is dropped (a reclaim ignores it; a lobby join then fails in the room).
+    expect(parseJoinPayload({ code: 'ABCDE', name: '', avatar: 'dragon', rejoinKey: 'k3y' })).toEqual({
+      code: 'ABCDE',
+      rejoinKey: 'k3y',
+    });
+    // Without a key the name is still required.
+    expect(() => parseJoinPayload({ code: 'ABCDE' })).toThrow(BadRequest);
+    expect(() => parseJoinPayload({ code: 'ABCDE', rejoinKey: '' })).toThrow(BadRequest);
+    expect(() => parseJoinPayload({ code: 'ABCDE', name: 'An', rejoinKey: 42 })).toThrow(BadRequest);
   });
 
   it('parses lobby payloads and drops unknown keys', () => {

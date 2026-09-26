@@ -35,7 +35,8 @@ import { fail, OK, type Connection, type Failure, type Result } from '../transpo
 import { botEmoteReactions } from './botEmotes';
 import type { DecideBot } from './botDriver';
 import { GameRunner } from './GameRunner';
-import { nameKey, pickBotName, uniqueName } from './names';
+import { pickBotName, uniqueName } from './names';
+import { newRejoinKey, sameRejoinKey } from './rejoinKey';
 
 export interface RoomDeps {
   clock: Clock;
@@ -59,6 +60,13 @@ export interface JoinProfile {
   avatar?: AvatarId;
 }
 
+/** `room:join` input. `name` is required for a lobby join; a reclaim by `rejoinKey` ignores the profile. */
+export interface JoinRequest {
+  name?: string;
+  avatar?: AvatarId;
+  rejoinKey?: string;
+}
+
 interface Seat {
   id: string;
   name: string;
@@ -69,6 +77,12 @@ interface Seat {
   wins: number;
   /** Humans only; null once the seat is no longer owned by any client (left). */
   token: string | null;
+  /**
+   * Humans only: secret proving ownership of the seat (SPEC §2). Sent only in this seat's own
+   * RoomView; `room:join {code, rejoinKey}` reclaims the seat while a game is running/finished.
+   * Stable for the seat's lifetime so a saved rejoin link keeps working.
+   */
+  readonly rejoinKey: string | null;
   conn: Connection | null;
   botControlled: boolean;
   left: boolean;
@@ -80,7 +94,7 @@ interface Seat {
   lastSentSeq: number;
 }
 
-type JoinPlan = { kind: 'existing'; seat: Seat } | { kind: 'new' } | { kind: 'reclaim'; seat: Seat };
+type JoinPlan = { kind: 'existing'; seat: Seat } | { kind: 'new'; name: string } | { kind: 'reclaim'; seat: Seat };
 
 /** Bot level used for a human seat that a bot plays on their behalf. */
 const TAKEOVER_BOT_LEVEL: BotLevel = 'normal';
@@ -139,8 +153,9 @@ export class Room {
     return this.seats.find((s) => s.token === token)?.id ?? null;
   }
 
+  /** Room view for one player; only their own seat's `rejoinKey` is included. */
   view(forId: string): RoomView {
-    return {
+    const view: RoomView = {
       code: this.code,
       hostId: this.hostId,
       status: this.status,
@@ -150,22 +165,27 @@ export class Room {
       maxPlayers: MAX_PLAYERS,
       gameNumber: this.gameNumber,
     };
+    const rejoinKey = this.find(forId)?.rejoinKey;
+    if (rejoinKey) view.rejoinKey = rejoinKey;
+    return view;
   }
 
   // ───────────── Membership ─────────────
 
   /** Would `join` succeed? (Lets the manager keep a player in their old room when it would not.) */
-  checkJoin(token: string, profile: JoinProfile): Failure | null {
-    const plan = this.planJoin(token, profile);
+  checkJoin(token: string, req: JoinRequest): Failure | null {
+    const plan = this.planJoin(token, req);
     return isFailure(plan) ? plan : null;
   }
 
   /**
-   * Lobby: take the lowest free seat. Game running/finished: reclaim a disconnected or left human
-   * seat with the same name (case-insensitive). Same token again: just re-attach.
+   * Same token again: just re-attach. Lobby: take the lowest free seat (a rejoinKey is ignored).
+   * Game running/finished: only reclaim — the human seat whose `rejoinKey` matches, whatever its
+   * state (disconnected, still connected elsewhere → that socket is 'replaced', or left). There
+   * is deliberately no rejoin by name: anyone at the table knows the names.
    */
-  join(token: string, conn: Connection, profile: JoinProfile): Result<{ playerId: string }> {
-    const plan = this.planJoin(token, profile);
+  join(token: string, conn: Connection, req: JoinRequest): Result<{ playerId: string }> {
+    const plan = this.planJoin(token, req);
     if (isFailure(plan)) return plan;
     switch (plan.kind) {
       case 'existing':
@@ -179,8 +199,8 @@ export class Room {
         return { ok: true, playerId: seat.id };
       }
       case 'new': {
-        const avatar = profile.avatar && !this.avatarTaken(profile.avatar) ? profile.avatar : this.freeAvatars()[0];
-        const seat = this.addSeat('human', uniqueName(profile.name, this.seats.map((s) => s.name)), avatar);
+        const avatar = req.avatar && !this.avatarTaken(req.avatar) ? req.avatar : this.freeAvatars()[0];
+        const seat = this.addSeat('human', uniqueName(plan.name, this.seats.map((s) => s.name)), avatar);
         seat.token = token;
         seat.conn = conn;
         if (!this.hostId) this.hostId = seat.id;
@@ -191,7 +211,11 @@ export class Room {
     }
   }
 
-  /** (Re)connect a socket to its seat: restores control from a bot and pushes a full resync. */
+  /**
+   * (Re)connect a socket to its seat: restores control from a bot (also for a reclaimed left
+   * seat) and pushes a full resync — or `game:cleared` when no game is running, so a client that
+   * missed the return to the lobby while offline drops its stale game.
+   */
   attach(playerId: string, conn: Connection): void {
     const seat = this.find(playerId);
     if (this.closed || !seat || seat.kind !== 'human') return;
@@ -202,7 +226,12 @@ export class Room {
     seat.botControlled = false;
     this.cancelSeatTimer(seat);
     if (regained) this.runner?.refreshControl();
+    // After game over only the host can start the next round: if the host is away (e.g. every
+    // human was offline when the game ended), hand the role to someone who is here.
+    if (this.status === 'finished' && !this.find(this.hostId)?.conn) this.transferHost(true);
     this.reviewOccupancy();
+    // Before room:state, so the client never renders a lobby room together with a stale game.
+    if (!this.runner) conn.send('game:cleared');
     this.broadcastRoom();
     if (this.runner) this.resync(seat);
   }
@@ -406,14 +435,26 @@ export class Room {
     return this.seats.find((s) => s.id === id);
   }
 
-  private planJoin(token: string, profile: JoinProfile): JoinPlan | Failure {
+  private planJoin(token: string, req: JoinRequest): JoinPlan | Failure {
     if (this.closed) return fail('room_not_found');
     const existing = this.seats.find((s) => s.token === token);
     if (existing) return { kind: 'existing', seat: existing };
-    if (this.status === 'lobby') return this.seats.length >= MAX_PLAYERS ? fail('room_full') : { kind: 'new' };
-    const key = nameKey(profile.name);
-    const seat = this.seats.find((s) => s.kind === 'human' && (s.left || !s.conn) && nameKey(s.name) === key);
-    return seat ? { kind: 'reclaim', seat } : fail('game_in_progress');
+    if (this.status === 'lobby') {
+      if (this.seats.length >= MAX_PLAYERS) return fail('room_full');
+      return req.name ? { kind: 'new', name: req.name } : fail('bad_request');
+    }
+    if (!req.rejoinKey) return fail('game_in_progress');
+    const seat = this.seatByRejoinKey(req.rejoinKey);
+    return seat ? { kind: 'reclaim', seat } : fail('bad_rejoin_key');
+  }
+
+  /** Compares against every human seat (no early exit) in constant time per key. */
+  private seatByRejoinKey(key: string): Seat | undefined {
+    let match: Seat | undefined;
+    for (const s of this.seats) {
+      if (s.kind === 'human' && s.rejoinKey !== null && sameRejoinKey(s.rejoinKey, key)) match = s;
+    }
+    return match;
   }
 
   private addSeat(kind: SeatKind, name: string, avatar: AvatarId): Seat {
@@ -431,6 +472,7 @@ export class Room {
       avatar,
       wins: 0,
       token: null,
+      rejoinKey: kind === 'human' ? newRejoinKey() : null,
       conn: null,
       botControlled: false,
       left: false,
@@ -527,7 +569,7 @@ export class Room {
   private removeDisconnected(seat: Seat): void {
     seat.timer = null;
     if (this.closed || seat.conn || this.status !== 'lobby' || !this.seats.includes(seat)) return;
-    this.removeSeat(seat, 'left');
+    this.removeSeat(seat, 'expired');
     if (!this.reviewOccupancy()) return;
     this.broadcastRoom();
   }

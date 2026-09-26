@@ -60,6 +60,32 @@ export function getCardBackUrl(): string {
   return cachedUrl('back', getCardBackCanvas);
 }
 
+/**
+ * Draws a cached canvas again in place (same object: textures made from it stay valid).
+ * Re-assigning the width clears the bitmap and resets the context state, so the second
+ * drawing starts exactly like the first.
+ */
+export function repaintCanvas(c: HTMLCanvasElement, draw: (g: CanvasRenderingContext2D) => void): void {
+  const g = c.getContext('2d');
+  if (!g) return;
+  c.width = c.width;
+  draw(g);
+}
+
+/**
+ * Redraws the cached card faces and back in place and forgets their data URLs — used when the
+ * web fonts arrive after the art was first drawn (see art/refresh.ts). Emblems and avatars
+ * have no text and are left alone.
+ */
+export function redrawCardArt(): void {
+  for (const [key, c] of faceCache) {
+    const [character, lang] = key.split(':') as [Character, Lang];
+    repaintCanvas(c, (g) => drawCardFace(g, character, lang));
+  }
+  if (backCanvas) repaintCanvas(backCanvas, drawCardBack);
+  for (const key of [...urlCache.keys()]) if (!key.startsWith('icon:')) urlCache.delete(key);
+}
+
 /** Round character emblem (128×128) — for chips on action buttons, log lines, bubbles. */
 export function getCharacterIconCanvas(character: Character): HTMLCanvasElement {
   const hit = iconCache.get(character);

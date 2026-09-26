@@ -18,12 +18,18 @@ export const ui: DictPair = {
 
     'conn.connecting': 'Đang kết nối tới máy chủ…',
     'conn.reconnecting': 'Mất kết nối — đang kết nối lại…',
+    'conn.replacedTitle': 'Phiên đã mở ở tab khác',
+    'conn.replacedBody': 'Bạn đang chơi ở một tab hoặc cửa sổ khác của trình duyệt này. Mỗi lúc chỉ một tab được kết nối.',
+    'conn.replacedHint': 'Nếu chơi ở đây, tab kia sẽ bị ngắt kết nối.',
+    'conn.playHere': 'Chơi ở tab này',
+    'doc.title': 'Coup — Quán Bài Nắng',
 
     // ── errors (ServerErrorCode, MoveError, client) ──
     'error.bad_request': 'Yêu cầu không hợp lệ.',
     'error.room_not_found': 'Không tìm thấy phòng này. Kiểm tra lại mã nhé!',
     'error.room_full': 'Phòng đã đủ người.',
-    'error.game_in_progress': 'Ván đang diễn ra — chỉ người chơi cũ (đúng tên cũ) mới vào lại được.',
+    'error.game_in_progress': 'Ván đang diễn ra — chỉ người chơi của ván này mới vào lại được (bằng link vào lại).',
+    'error.bad_rejoin_key': 'Link vào lại không đúng hoặc đã cũ. Hãy sao chép link mới trong menu của máy đang chơi.',
     'error.not_host': 'Chỉ chủ phòng mới làm được việc này.',
     'error.not_in_room': 'Bạn không còn ở trong phòng.',
     'error.not_enough_players': 'Cần ít nhất 2 người chơi để bắt đầu.',
@@ -39,6 +45,8 @@ export const ui: DictPair = {
     'error.unknown_player': 'Không tìm thấy người chơi.',
     'error.timeout': 'Máy chủ không phản hồi. Thử lại nhé.',
     'error.no_game': 'Không có ván nào đang diễn ra.',
+    'error.not_connected': 'Chưa kết nối tới máy chủ — thử lại sau giây lát nhé.',
+    'error.disconnected': 'Mất kết nối trước khi máy chủ kịp trả lời. Thử lại nhé.',
     'error.unknown': 'Có lỗi xảy ra, thử lại nhé.',
 
     // ── home ──
@@ -60,6 +68,7 @@ export const ui: DictPair = {
     'lobby.roomCode': 'Mã phòng',
     'lobby.copyCode': 'Sao chép mã',
     'lobby.copyLink': 'Sao chép link mời',
+    'lobby.localhostHint': 'Link này chỉ mở được trên chính máy này (localhost). Muốn mời bạn bè, hãy xem mục "Chơi với bạn bè" trong README.',
     'lobby.players': 'Người chơi {n}/{max}',
     'lobby.emptySeat': 'Ghế trống',
     'lobby.addBot': 'Thêm bot vào ghế trống',
@@ -83,7 +92,6 @@ export const ui: DictPair = {
     'lobby.waitingHost': 'Đang chờ chủ phòng bắt đầu',
     'lobby.leave': 'Rời phòng',
     'lobby.kick': 'Mời ra khỏi phòng',
-    'lobby.status.bot': 'Luôn sẵn sàng',
     'lobby.status.online': 'Trực tuyến',
     'lobby.status.offline': 'Mất kết nối',
     'lobby.winsTitle': 'Số ván thắng',
@@ -103,6 +111,8 @@ export const ui: DictPair = {
     'hud.leaveBody': 'Bạn sẽ rời khỏi phòng này.',
     'hud.leaveBodyPlaying': 'Ván đang diễn ra — một bot sẽ chơi thay bạn đến hết ván.',
     'hud.stay': 'Ở lại',
+    'hud.copyRejoin': 'Sao chép link vào lại',
+    'hud.copyRejoinHint': 'Link bí mật để chơi tiếp trên máy khác — đừng gửi cho ai.',
     'hud.dealing': 'Đang chia bài…',
     'hud.yourCards': 'Bài của bạn',
     'hud.coins': 'Số xu của bạn',
@@ -114,6 +124,9 @@ export const ui: DictPair = {
     'phase.selfAction': 'Bạn chọn {action} — chờ mọi người phản ứng',
     'phase.selfBlock': 'Bạn chặn bằng {char} — chờ mọi người phản ứng',
     'phase.blockYou': '{blocker} chặn {action} của bạn bằng {char}',
+    'phase.selfBlockPending': 'Bạn đã chặn bằng {char} — chờ người khác quyết định có thách thức {actor} không',
+    'phase.blockYouPending': '{blocker} đã chặn {action} của bạn bằng {char} — những người khác vẫn có thể thách thức bạn',
+    'phase.blockedTail': '— {blocker} đã chặn bằng {char}',
     'phase.lose.self': 'Bạn phải lật một lá ({reason})',
     'phase.lose.other': '{player} phải lật một lá ({reason})',
     'phase.exchange.self': 'Đổi bài: chọn {n} lá để giữ lại',
@@ -131,6 +144,9 @@ export const ui: DictPair = {
     'wait.forLose': 'Đang chờ {name} chọn lá để lật',
     'wait.forExchange': '{name} đang đổi bài',
     'wait.passed': 'Bạn đã cho qua',
+    'wait.blocked': 'Bạn đã chặn',
+    'wait.challengeAction': 'Đang chờ {names} quyết định có thách thức {actor} không',
+    'wait.challengeYou': 'Đang chờ {names} quyết định có thách thức bạn không',
     'wait.yourModal': 'Hãy đưa ra lựa chọn trong bảng giữa màn hình',
     'spect.out': 'Bạn đã bị loại',
     'spect.viewer': 'Bạn đang xem ván đấu',
@@ -150,12 +166,16 @@ export const ui: DictPair = {
     // ── targeting ──
     'target.title': '{action}: chọn mục tiêu',
     'target.hint': 'Bấm vào nhân vật trên bàn hoặc chọn bên dưới (phím số).',
+    'target.cards': 'Còn {n} lá úp',
+    'target.hiddenCard': 'Lá úp',
+    'target.lostCard': 'Đã lật: {char}',
 
     // ── response panel ──
     'resp.q.believe': 'Bạn có tin không?',
     'resp.q.block': 'Bạn có muốn chặn không?',
     'resp.q.challengeOrBlock': 'Thách thức, chặn hay cho qua?',
     'resp.q.blockReal': 'Lá chặn này là thật hay bịp?',
+    'resp.q.challengeBlocked': 'Bạn có thách thức {char} của {actor} không?',
     'resp.youTarget': 'Bạn là mục tiêu!',
     'resp.blockWith': 'Chặn bằng {char}',
     'resp.blockWithLabel': 'Chặn bằng',
@@ -183,6 +203,13 @@ export const ui: DictPair = {
     'ex.auto': 'Hết giờ sẽ giữ nguyên bài cũ.',
 
     'emote.title': 'Biểu cảm',
+
+    // ── invite while still seated elsewhere ──
+    'invite.title': 'Chuyển sang phòng {new}?',
+    'invite.body': 'Bạn vẫn đang ở phòng {old} — rời phòng đó và vào {new}?',
+    'invite.bodyPlaying': 'Ván ở phòng {old} vẫn đang diễn ra: nếu rời đi, bot sẽ chơi thay bạn đến hết ván.',
+    'invite.stay': 'Ở lại {old}',
+    'invite.switch': 'Rời và vào {new}',
 
     // ── game over ──
     'over.youWin': 'Bạn thắng!',
@@ -263,7 +290,8 @@ export const ui: DictPair = {
     'rules.sp.mustCoup': 'Bắt đầu lượt với từ 10 xu trở lên thì bắt buộc phải Đảo chính.',
     'rules.sp.challenge':
       'Ai cũng có thể thách thức một lời tuyên bố nhân vật (kể cả lời chặn). Nếu người bị thách thức có lá đó: lật cho xem, xáo lại vào chồng bài và rút lá mới — người thách thức mất 1 ảnh hưởng. Nếu không có: người bị thách thức mất 1 ảnh hưởng và hành động/lá chặn thất bại.',
-    'rules.sp.blocks': 'Ai cũng có thể tuyên bố Công tước để chặn Viện trợ; chỉ người bị nhắm mới được chặn Cướp và Ám sát.',
+    'rules.sp.blocks':
+      'Ai cũng có thể tuyên bố Công tước để chặn Viện trợ; chỉ người bị nhắm mới được chặn Cướp và Ám sát. Dù mục tiêu đã chặn, những người khác vẫn được thách thức lời tuyên bố của người ra tay trước.',
     'rules.sp.refund': 'Ám sát bị thách thức thành công (sát thủ nói dối) được hoàn 3 xu. Ám sát bị Nữ bá tước chặn thì mất luôn 3 xu.',
     'rules.sp.lose': 'Khi mất ảnh hưởng, bạn tự chọn lá để lật ngửa. Hết lá úp là bị loại và xu trả về kho bạc.',
     'rules.sp.double': 'Có thể mất 2 lá trong cùng một lượt (ví dụ: thách thức Sát thủ sai rồi vẫn bị ám sát).',
@@ -285,11 +313,17 @@ export const ui: DictPair = {
 
     'conn.connecting': 'Connecting to the server…',
     'conn.reconnecting': 'Connection lost — reconnecting…',
+    'conn.replacedTitle': 'Opened in another tab',
+    'conn.replacedBody': "You're playing in another tab or window of this browser. Only one tab can be connected at a time.",
+    'conn.replacedHint': 'Playing here disconnects the other tab.',
+    'conn.playHere': 'Play in this tab',
+    'doc.title': 'Coup — Sunny Tavern',
 
     'error.bad_request': 'Invalid request.',
     'error.room_not_found': 'Room not found. Double-check the code!',
     'error.room_full': 'The room is full.',
-    'error.game_in_progress': 'A game is in progress — only a returning player (same name) can rejoin.',
+    'error.game_in_progress': 'A game is in progress — only its players can rejoin (with their rejoin link).',
+    'error.bad_rejoin_key': 'This rejoin link is wrong or out of date. Copy a fresh one from the menu on the device you are playing on.',
     'error.not_host': 'Only the host can do that.',
     'error.not_in_room': "You're no longer in a room.",
     'error.not_enough_players': 'At least 2 players are needed to start.',
@@ -305,6 +339,8 @@ export const ui: DictPair = {
     'error.unknown_player': 'Unknown player.',
     'error.timeout': 'The server did not respond. Please try again.',
     'error.no_game': 'No game in progress.',
+    'error.not_connected': 'Not connected to the server — try again in a moment.',
+    'error.disconnected': 'The connection dropped before the server answered. Please try again.',
     'error.unknown': 'Something went wrong, please try again.',
 
     'home.tagline': 'Bluff, challenge and seize power!',
@@ -324,6 +360,7 @@ export const ui: DictPair = {
     'lobby.roomCode': 'Room code',
     'lobby.copyCode': 'Copy code',
     'lobby.copyLink': 'Copy invite link',
+    'lobby.localhostHint': 'This link only works on this computer (localhost). To invite friends, see "Chơi với bạn bè" (Play with friends) in the README.',
     'lobby.players': 'Players {n}/{max}',
     'lobby.emptySeat': 'Empty seat',
     'lobby.addBot': 'Fill seats with bots',
@@ -347,7 +384,6 @@ export const ui: DictPair = {
     'lobby.waitingHost': 'Waiting for the host to start',
     'lobby.leave': 'Leave room',
     'lobby.kick': 'Remove from room',
-    'lobby.status.bot': 'Always ready',
     'lobby.status.online': 'Online',
     'lobby.status.offline': 'Disconnected',
     'lobby.winsTitle': 'Games won',
@@ -366,6 +402,8 @@ export const ui: DictPair = {
     'hud.leaveBody': 'You will leave this room.',
     'hud.leaveBodyPlaying': 'The game is still running — a bot will play your seat until it ends.',
     'hud.stay': 'Stay',
+    'hud.copyRejoin': 'Copy rejoin link',
+    'hud.copyRejoinHint': "Secret link to keep playing on another device — don't share it.",
     'hud.dealing': 'Dealing cards…',
     'hud.yourCards': 'Your cards',
     'hud.coins': 'Your coins',
@@ -376,6 +414,9 @@ export const ui: DictPair = {
     'phase.selfAction': 'You chose {action} — waiting for reactions',
     'phase.selfBlock': 'You block with {char} — waiting for reactions',
     'phase.blockYou': '{blocker} blocks your {action} with {char}',
+    'phase.selfBlockPending': 'You blocked with {char} — waiting to see if anyone challenges {actor}',
+    'phase.blockYouPending': '{blocker} blocked your {action} with {char} — others may still challenge you',
+    'phase.blockedTail': '— {blocker} blocked with {char}',
     'phase.lose.self': 'You must reveal a card ({reason})',
     'phase.lose.other': '{player} must reveal a card ({reason})',
     'phase.exchange.self': 'Exchange: choose {n} cards to keep',
@@ -392,6 +433,9 @@ export const ui: DictPair = {
     'wait.forLose': 'Waiting for {name} to pick a card to reveal',
     'wait.forExchange': '{name} is exchanging cards',
     'wait.passed': 'You allowed it',
+    'wait.blocked': 'You blocked',
+    'wait.challengeAction': 'Waiting for {names} to decide whether to challenge {actor}',
+    'wait.challengeYou': 'Waiting for {names} to decide whether to challenge you',
     'wait.yourModal': 'Make your choice in the dialog',
     'spect.out': "You're out",
     'spect.viewer': "You're watching",
@@ -409,11 +453,15 @@ export const ui: DictPair = {
 
     'target.title': '{action}: pick a target',
     'target.hint': 'Click a character at the table or pick below (number keys).',
+    'target.cards': 'Face-down cards: {n}',
+    'target.hiddenCard': 'Face-down card',
+    'target.lostCard': 'Revealed: {char}',
 
     'resp.q.believe': 'Do you believe it?',
     'resp.q.block': 'Do you want to block?',
     'resp.q.challengeOrBlock': 'Challenge, block or allow?',
     'resp.q.blockReal': 'Is that block real or a bluff?',
+    'resp.q.challengeBlocked': "Do you challenge {actor}'s {char}?",
     'resp.youTarget': "You're the target!",
     'resp.blockWith': 'Block with {char}',
     'resp.blockWithLabel': 'Block with',
@@ -439,6 +487,12 @@ export const ui: DictPair = {
     'ex.auto': 'If time runs out, you keep your current hand.',
 
     'emote.title': 'Emotes',
+
+    'invite.title': 'Switch to room {new}?',
+    'invite.body': "You're still in room {old} — leave it and join {new}?",
+    'invite.bodyPlaying': 'The game in room {old} is still running: if you leave, a bot will play your seat until it ends.',
+    'invite.stay': 'Stay in {old}',
+    'invite.switch': 'Leave and join {new}',
 
     'over.youWin': 'You win!',
     'over.playerWins': '{name} wins!',
@@ -516,7 +570,8 @@ export const ui: DictPair = {
     'rules.sp.mustCoup': 'If you start your turn with 10 or more coins, you must Coup.',
     'rules.sp.challenge':
       'Anyone may challenge a character claim (including blocks). If the challenged player has it, they show it, shuffle it back and draw a new card — the challenger loses an influence. Otherwise the challenged player loses an influence and the action/block fails.',
-    'rules.sp.blocks': 'Anyone may claim Duke to block Foreign Aid; only the target may block Steal and Assassinate.',
+    'rules.sp.blocks':
+      "Anyone may claim Duke to block Foreign Aid; only the target may block Steal and Assassinate. Even after the target blocks, the others may still challenge the actor's claim first.",
     'rules.sp.refund': 'A successfully challenged Assassinate refunds the 3 coins. If the Contessa blocks it, the coins stay spent.',
     'rules.sp.lose': 'When you lose an influence you choose which card to reveal. With no face-down cards left you are out and your coins return to the treasury.',
     'rules.sp.double': 'You can lose two cards in one turn (e.g. wrongly challenge an Assassin, then still get assassinated).',

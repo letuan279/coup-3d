@@ -40,14 +40,16 @@ describe('ui dictionary', () => {
     for (const k of Object.keys(ui.vi)) expect(ph(ui.en[k] ?? ''), k).toBe(ph(ui.vi[k]));
   });
 
-  it('every literal t("…") key used by the HUD exists', () => {
-    const dir = fileURLToPath(new URL('.', import.meta.url));
-    const re = /\bt\(\s*'([a-zA-Z0-9_.]+)'/g;
+  it('every literal t("…") / toast("…") key used by the HUD and the net layer exists', () => {
+    const dirs = ['.', '../net'].map((d) => fileURLToPath(new URL(d, import.meta.url)));
+    const res = [/\bt\(\s*'([a-zA-Z0-9_.]+)'/g, /\btoast\(\s*'([a-zA-Z0-9_.]+)'/g];
     const keys = new Set<string>();
-    for (const f of sourceFiles(dir)) {
-      for (const m of readFileSync(f, 'utf8').matchAll(re)) keys.add(m[1]);
+    for (const f of dirs.flatMap(sourceFiles)) {
+      const src = readFileSync(f, 'utf8');
+      for (const re of res) for (const m of src.matchAll(re)) keys.add(m[1]);
     }
     expect(keys.size).toBeGreaterThan(50);
+    expect(keys).toContain('toast.expired');
     for (const k of keys) expectKey(k);
   });
 
@@ -75,6 +77,25 @@ describe('ui dictionary', () => {
     }
     for (const e of EMOTES) expectKey(`emote.${e}`);
     for (const a of AVATARS) expectKey(`avatar.${a}`);
-    for (const k of ['toast.kicked', 'toast.replaced', 'toast.roomDeleted']) expectKey(k);
+    for (const k of ['toast.kicked', 'toast.replaced', 'toast.roomDeleted', 'toast.expired']) expectKey(k);
+    // Keys picked at runtime (WaitingPanel.waitKey, phaseText, ConnectionBanner, documentLang).
+    for (const k of [
+      'wait.forAction',
+      'wait.for',
+      'wait.forLose',
+      'wait.forExchange',
+      'wait.challengeAction',
+      'wait.challengeYou',
+      'phase.selfBlockPending',
+      'phase.blockYouPending',
+      'phase.blockedTail',
+      'conn.connecting',
+      'conn.reconnecting',
+      'doc.title',
+    ]) {
+      expectKey(k);
+    }
+    expect(errorKey('bad_rejoin_key')).toBe('error.bad_rejoin_key');
+    expect(SERVER_ERROR_CODES).toContain('bad_rejoin_key');
   });
 });

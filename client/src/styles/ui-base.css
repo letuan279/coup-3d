@@ -691,6 +691,11 @@ kbd {
   background: rgba(43, 33, 64, 0.25);
 }
 
+.modal-backdrop.is-blocking {
+  z-index: calc(var(--z-conn) + 1);
+  background: rgba(43, 33, 64, 0.6);
+}
+
 .modal {
   position: relative;
   display: flex;

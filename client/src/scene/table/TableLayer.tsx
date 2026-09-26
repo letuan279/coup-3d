@@ -7,7 +7,8 @@ import type { GameView } from '@shared/types';
 import { TREASURY_COINS } from '@shared/constants';
 import { useGame, type Lang } from '../../store/useGame';
 import { homeAngle, slotAngle } from '../layout';
-import { targetIds, type SceneModel } from '../sceneModel';
+import type { SceneModel } from '../sceneModel';
+import { resetPointer, syncTargeting, useTargetKey } from '../interaction';
 import { HOME_CAST, homeSeat } from '../HomeCast';
 import { ExchangeFlights, TableCard, type CardSpec } from './Cards';
 import { Coins, resetCoinFlights, type CoinTableState } from './Coins';
@@ -25,12 +26,19 @@ export const TableLayer = memo(function TableLayer({
   lang: Lang;
   gameNumber: number;
 }) {
-  const targetKey = useGame((s) => targetIds(s.game, s.ui.targeting).join(','));
+  const targetKey = useTargetKey();
+  const targeting = useGame((s) => s.ui.targeting);
   const targets = useMemo(() => new Set(targetKey ? targetKey.split(',') : []), [targetKey]);
 
   useEffect(() => {
     resetCoinFlights();
+    resetPointer();
   }, [gameNumber, model.mode]);
+
+  // Targeting started/ended or a move went out: fix the cursor, drop a stale hover highlight.
+  useEffect(() => {
+    syncTargeting();
+  }, [targetKey, targeting]);
 
   const cards = useMemo((): CardSpec[] => {
     if (model.mode === 'home') {
@@ -95,7 +103,13 @@ export const TableLayer = memo(function TableLayer({
   return (
     <>
       {cards.map((c) => (
-        <TableCard key={c.key} spec={c} lang={lang} targetable={targets.has(c.playerId)} />
+        <TableCard
+          key={c.key}
+          spec={c}
+          lang={lang}
+          interactive={model.mode === 'game' && !c.isLocal}
+          targetable={targets.has(c.playerId)}
+        />
       ))}
       <Coins state={coins} />
       <CenterPile deckCount={deckCount} />

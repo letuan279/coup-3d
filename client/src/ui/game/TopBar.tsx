@@ -3,7 +3,7 @@ import { useT } from '../../i18n';
 import { api } from '../../net/socket';
 import { useGame } from '../../store/useGame';
 import { withToast } from '../apiToast';
-import { copyText } from '../clipboard';
+import { copyText, rejoinLink } from '../clipboard';
 import { CoinIcon } from '../common/Coin';
 import { Icon } from '../common/Icon';
 import { Modal } from '../common/Modal';
@@ -73,6 +73,8 @@ const HudMenu = memo(function HudMenu() {
   const setShowLog = useGame((s) => s.setShowLog);
   const muted = useGame((s) => s.ui.muted);
   const toggleMute = useGame((s) => s.toggleMute);
+  const code = useGame((s) => s.room?.code);
+  const rejoinKey = useGame((s) => s.room?.rejoinKey);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,6 +131,23 @@ const HudMenu = memo(function HudMenu() {
             <Icon name={muted ? 'soundOff' : 'soundOn'} size={20} />
             {t(muted ? 'ui.sound.off' : 'ui.sound.on')}
           </button>
+          {code && rejoinKey && (
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item menu-item--tall"
+              onClick={() => {
+                void copyText(rejoinLink(code, rejoinKey));
+                close();
+              }}
+            >
+              <Icon name="link" size={20} />
+              <span className="menu-item__text">
+                {t('hud.copyRejoin')}
+                <small className="menu-item__hint">{t('hud.copyRejoinHint')}</small>
+              </span>
+            </button>
+          )}
           <div className="menu-item menu-item--static">
             <Icon name="globe" size={20} />
             <span>{t('hud.language')}</span>

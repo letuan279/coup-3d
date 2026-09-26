@@ -36,6 +36,13 @@ export interface LevelTuning {
   catchImpossibleRate: number;
   /** Extra value a challenge must beat passing by. */
   challengeMargin: number;
+  /** The margin for challenging an action claim heads-up (the gain is not shared with anyone). */
+  duelChallengeMargin: number;
+  /**
+   * The margin when the bot is the actor whose action was blocked: nobody else is likely to call
+   * a block on the bot's behalf, so a player who bluff-blocks every steal must not get a pass.
+   */
+  blockedActorMargin: number;
   /** Multiplier on the personality's bluff rate. */
   bluffScale: number;
   /** Chance to pick a random target instead of the best one. */
@@ -44,6 +51,11 @@ export interface LevelTuning {
   realBlockRate: number;
   /** Chance to coup when holding 7–9 coins. */
   coupRate: number;
+  /**
+   * Holding a Duke under 7 coins: chance to take a nearly-as-good honest action instead of Tax,
+   * so that skipping Tax does not prove the bot has no Duke.
+   */
+  dukeMixRate: number;
   /** Chance to panic-pass instead of fighting a lethal assassination. */
   givesUpRate: number;
   /** With one card left, bluff only when the estimated challenge risk is below this… */
@@ -59,10 +71,13 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     evNoise: 0.5,
     catchImpossibleRate: 0.8,
     challengeMargin: 0.45,
+    duelChallengeMargin: 0.45,
+    blockedActorMargin: 0.45,
     bluffScale: 0.5,
     targetRandomness: 0.5,
     realBlockRate: 0.85,
     coupRate: 0.6,
+    dukeMixRate: 0,
     givesUpRate: 0.25,
     oneCardBluffRisk: 0.3,
     oneCardBluff: 0.05,
@@ -73,10 +88,13 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     evNoise: 0.12,
     catchImpossibleRate: 1,
     challengeMargin: 0.04,
+    duelChallengeMargin: 0.04,
+    blockedActorMargin: 0.04,
     bluffScale: 1.55,
     targetRandomness: 0.1,
     realBlockRate: 0.97,
     coupRate: 0.88,
+    dukeMixRate: 0.1,
     givesUpRate: 0,
     oneCardBluffRisk: 0.12,
     oneCardBluff: 0.05,
@@ -87,10 +105,13 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     evNoise: 0.04,
     catchImpossibleRate: 1,
     challengeMargin: 0.25,
+    duelChallengeMargin: 0.15,
+    blockedActorMargin: 0.08,
     bluffScale: 1.6,
     targetRandomness: 0,
     realBlockRate: 1,
     coupRate: 0.97,
+    dukeMixRate: 0.12,
     givesUpRate: 0,
     oneCardBluffRisk: 0.15,
     oneCardBluff: 0.5,

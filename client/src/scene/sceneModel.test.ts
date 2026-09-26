@@ -124,6 +124,27 @@ describe('currentDeciders', () => {
     expect(currentDeciders(game(players, 'a', { phase: { kind: 'game_over', winnerId: 'a' } }))).toEqual([]);
     expect(currentDeciders(null)).toEqual([]);
   });
+
+  it('a block declared while others may still challenge the action: rings go to the remaining responders', () => {
+    const four = [pub('a', 0), pub('b', 1), pub('c', 2), pub('d', 3)];
+    const stealB = { type: 'steal' as const, actorId: 'a', targetId: 'b', claim: 'captain' as const };
+    const g = game(four, 'c', {
+      pendingAction: stealB,
+      pendingBlock: { blockerId: 'b', character: 'ambassador' },
+      // SPEC §1.1: the blocker counts as responded (in `passed`), the window stays open.
+      phase: {
+        kind: 'action_response',
+        action: stealB,
+        responders: ['b', 'c', 'd'],
+        passed: ['b'],
+        canChallenge: true,
+        blockers: ['b'],
+        blockCharacters: ['captain', 'ambassador'],
+      },
+    });
+    expect(currentDeciders(g)).toEqual(['c', 'd']);
+    expect(currentDeciders({ ...g, phase: { ...g.phase, passed: ['b', 'd'] } as GameView['phase'] })).toEqual(['c']);
+  });
 });
 
 describe('targetIds', () => {

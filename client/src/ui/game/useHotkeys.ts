@@ -1,13 +1,14 @@
 /**
  * Game keyboard shortcuts: 1–7 actions (ACTION_TYPES order; digits pick targets / cards while
- * targeting or losing influence), C challenge, B block (first block character), P / Space pass,
- * Esc cancel / close. Reads the store at key time — no subscriptions.
+ * targeting or losing influence), C challenge, B block (a held block character first — see
+ * hotkeyBlockCharacter), P / Space pass, Esc cancel / close. Reads the store at key time — no
+ * subscriptions.
  */
 import { useEffect } from 'react';
 import { ACTION_TYPES } from '@shared/types';
 import { useGame } from '../../store/useGame';
 import { useHud } from '../hudStore';
-import { pickAction, pickTarget, respond, sendMove } from '../moves';
+import { hotkeyBlockCharacter, isMoveLocked, pickAction, pickTarget, respond, sendMove } from '../moves';
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -49,7 +50,7 @@ export function useHotkeys(): void {
       if (e.repeat) return;
       const s = useGame.getState();
       const hud = useHud.getState();
-      if (hud.leaveConfirm || s.ui.showRules || hud.moveInFlight) return;
+      if (hud.leaveConfirm || s.ui.showRules || isMoveLocked()) return;
       const prompt = s.game?.prompt;
       if (!prompt) return;
       const digit = digitOf(e);
@@ -73,13 +74,16 @@ export function useHotkeys(): void {
           e.preventDefault();
           return;
         }
-        case 'respond_action':
+        case 'respond_action': {
+          const me = s.game?.players.find((p) => p.id === s.game?.viewerId);
+          const blockChar = hotkeyBlockCharacter(prompt.blockCharacters, me?.influences);
           if (key === 'c' && prompt.canChallenge) respond.challenge();
-          else if (key === 'b' && prompt.blockCharacters.length > 0) respond.block(prompt.blockCharacters[0]);
+          else if (key === 'b' && blockChar) respond.block(blockChar);
           else if (key === 'p' || e.code === 'Space') respond.pass();
           else return;
           e.preventDefault();
           return;
+        }
         case 'respond_block':
           if (key === 'c') respond.challenge();
           else if (key === 'p' || e.code === 'Space') respond.pass();

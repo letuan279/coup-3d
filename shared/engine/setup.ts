@@ -46,6 +46,7 @@ export function createGameState(opts: NewGameOptions): GameState {
     actorId: '',
     pendingAction: null,
     pendingBlock: null,
+    knownInDeck: {},
     phase: { kind: 'turn' },
     phaseSeq: 1,
     log: [],

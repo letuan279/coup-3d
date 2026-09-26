@@ -2,7 +2,7 @@
  * Pure helpers that turn the current GameView phase into localized sentences for the phase
  * banner / waiting indicator.
  */
-import type { GameView, PhaseView } from '@shared/types';
+import type { DeclaredBlock, GameView, PhaseView } from '@shared/types';
 import { describeEvent, type NamedPlayer } from '../log/describe';
 import { formatSegs, seg, type Seg, type Translate } from '../log/rich';
 
@@ -31,6 +31,29 @@ export function pendingDeciders(phase: PhaseView): string[] {
   }
 }
 
+/**
+ * The block already declared while the action window is still open for the OTHER players to
+ * challenge the action's claim (SPEC §1.1). null in every other situation.
+ */
+export function blockDuringActionWindow(g: Pick<GameView, 'phase' | 'pendingBlock'>): DeclaredBlock | null {
+  return g.phase.kind === 'action_response' ? g.pendingBlock : null;
+}
+
+/**
+ * "Heo tuyên bố Thuyền trưởng để Cướp xu của Gấu — Gấu đã chặn bằng Đại sứ": the declared action
+ * followed by the block that is waiting for the action window to close.
+ */
+export function describeBlockedAction(g: GameView, block: DeclaredBlock, selfId: string | null, t: Translate): Seg[] {
+  const players: readonly NamedPlayer[] = g.players;
+  const a = g.phase.kind === 'action_response' ? g.phase.action : g.pendingAction;
+  if (!a) return [];
+  const d = describeEvent({ type: 'action', actorId: a.actorId, action: a.type, targetId: a.targetId, claim: a.claim }, players, t, {
+    selfId,
+  });
+  const blocker = seg.player(block.blockerId, players.find((p) => p.id === block.blockerId)?.name ?? '???');
+  return [...d.segs, { k: 'text', v: ' ' }, ...formatSegs(t('phase.blockedTail'), { blocker, char: seg.char(block.character, t) })];
+}
+
 export function describePhase(g: GameView, selfId: string | null, t: Translate): PhaseDescription {
   const players: readonly NamedPlayer[] = g.players;
   const P = (id: string): Seg => seg.player(id, players.find((p) => p.id === id)?.name ?? '???');
@@ -47,6 +70,14 @@ export function describePhase(g: GameView, selfId: string | null, t: Translate):
     }
     case 'action_response': {
       const a = ph.action;
+      const b = g.pendingBlock;
+      if (b) {
+        // Blocked already, but the others may still challenge the action's claim first.
+        const params = { blocker: P(b.blockerId), actor: P(a.actorId), action: seg.action(a.type, t), char: seg.char(b.character, t) };
+        if (b.blockerId === selfId) return { segs: f('phase.selfBlockPending', params), focusId: b.blockerId, mine: true };
+        if (a.actorId === selfId) return { segs: f('phase.blockYouPending', params), focusId: b.blockerId, mine: false };
+        return { segs: describeBlockedAction(g, b, selfId, t), focusId: a.actorId, mine: false };
+      }
       if (a.actorId === selfId) {
         return { segs: f('phase.selfAction', { action: seg.action(a.type, t) }), focusId: a.actorId, mine: true };
       }

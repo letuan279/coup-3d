@@ -19,7 +19,7 @@ const BASE_VALUE: Record<Character, number> = {
 
 /** 0..1: how likely an assassination is coming the bot's way. */
 function assassinThreat(S: Situation): number {
-  if (S.K.unseen.assassin <= 0) return 0;
+  if (S.K.inHands.assassin <= 0) return 0;
   let t = 0;
   for (const o of S.K.opponents) {
     const claimed = o.claims.some((r) => r.character === 'assassin');
@@ -32,7 +32,7 @@ function assassinThreat(S: Situation): number {
 function stealThreat(S: Situation): number {
   if (S.me.coins <= 0) return 0;
   const claimed = S.K.opponents.some((o) => o.claims.some((r) => r.character === 'captain'));
-  return claimed ? 1 : S.K.unseen.captain > 0 ? 0.4 : 0;
+  return claimed ? 1 : S.K.inHands.captain > 0 ? 0.4 : 0;
 }
 
 /** Bonus for keeping the character the bot has been claiming (a consistent story). */
@@ -59,7 +59,7 @@ function cardValue(S: Situation, c: Character): number {
       break;
     case 'contessa':
       v += 1.3 * assassinThreat(S);
-      if (S.K.unseen.assassin <= 0) v -= 0.6;
+      if (S.K.inHands.assassin <= 0) v -= 0.6;
       break;
     case 'ambassador':
       v += 0.3 * stealThreat(S);

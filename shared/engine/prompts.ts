@@ -52,7 +52,8 @@ export function getPromptFor(s: GameState, playerId: string): Prompt | null {
       return {
         kind: 'respond_action',
         canChallenge: phase.canChallenge,
-        blockCharacters: phase.blockers.includes(playerId) ? phase.blockCharacters.slice() : [],
+        // Once a block is recorded the window only stays open to challenge the action (SPEC §1.1).
+        blockCharacters: phase.blockers.includes(playerId) && !s.pendingBlock ? phase.blockCharacters.slice() : [],
       };
     case 'block_response':
       if (!phase.responders.includes(playerId) || phase.passed.includes(playerId)) return null;

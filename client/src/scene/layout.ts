@@ -93,3 +93,20 @@ export function seatCamera(total: number): { radius: number; height: number; loo
     lookIn: 0.35,
   };
 }
+
+/**
+ * Where the first-person camera stands on the floor plan (x = 0, z = VIEW_Z). Things that
+ * should face the local player (revealed cards, coin stacks in front of them) aim here; the
+ * real camera distance only varies by ±0.2 m with the table size.
+ */
+export const VIEW_Z = seatCamera(4).radius;
+
+/**
+ * Which hand of the seated opponent (+1 = their right, -1 = their left) is on the camera's
+ * side of their cards. Coin stacks go there so standing (revealed) cards never hide them.
+ */
+export function cameraSideHand(angle: number): 1 | -1 {
+  // right · (camera − cards) = rightZ · VIEW_Z, because `right` is perpendicular to `out`;
+  // rightZ = sin(angle).
+  return Math.sin(angle) < -1e-6 ? -1 : 1;
+}

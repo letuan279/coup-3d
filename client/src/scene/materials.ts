@@ -153,14 +153,17 @@ export const hitMat = once(() => new MeshBasicMaterial({ visible: false }));
 // ── Cards ──
 const cardMats = new Map<string, MeshBasicMaterial>();
 
-/** Card face material; `dead` = revealed (lost) influence, drawn darker. */
+/**
+ * Card face material; `dead` = revealed (lost) influence, drawn a little greyer. Kept light
+ * enough that the portrait and name ribbon stay readable across the table.
+ */
 export function cardFaceMat(character: Character, lang: Lang, dead: boolean): MeshBasicMaterial {
   const key = `${character}:${lang}:${dead ? 1 : 0}`;
   let mat = cardMats.get(key);
   if (!mat) {
     mat = new MeshBasicMaterial({
       map: cardFaceTexture(character, lang),
-      color: new Color(dead ? '#8C8496' : '#FFFFFF'),
+      color: new Color(dead ? '#B8B0C4' : '#FFFFFF'),
       toneMapped: false,
     });
     cardMats.set(key, mat);

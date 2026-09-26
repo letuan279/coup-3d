@@ -96,7 +96,10 @@ export type Phase =
   /**
    * Other players react to the declared action. Every id in `responders` may pass, challenge
    * (if `canChallenge`) or block (if listed in `blockers`, with one of `blockCharacters`).
-   * The first challenge/block wins; when every responder has passed the action resolves.
+   * The first challenge ends the window. A block of a challengeable action (steal/assassinate)
+   * while others have not answered yet is recorded in `pendingBlock` (blocker added to
+   * `passed`) and the window stays open so the others can still challenge the ACTION; when
+   * everyone has answered, a pending block goes to block_response, otherwise the action resolves.
    */
   | {
       kind: 'action_response';
@@ -260,6 +263,7 @@ export type PhaseView =
       playerId: string;
       reason: LossReason;
       action: DeclaredAction | null;
+      /** The block this loss is about (null when the loss comes from the action, e.g. a wrong challenge of the action's claim). */
       block: DeclaredBlock | null;
     }
   | { kind: 'exchange'; actorId: string; action: DeclaredAction }

@@ -7,7 +7,7 @@ import { FakeClock } from '../testing/fakeClock';
 import { FakeConnection } from '../testing/fakeConnection';
 import { DEFAULT_TIMING, type ServerTiming } from '../timing';
 import type { DecideBot } from './botDriver';
-import { Room } from './Room';
+import { Room, type ClosedReason } from './Room';
 
 const T = DEFAULT_TIMING;
 
@@ -20,13 +20,18 @@ interface Human {
 function setup(opts: { decideBot?: DecideBot; timing?: ServerTiming; seed?: number } = {}) {
   const clock = new FakeClock();
   const released: string[] = [];
+  /** Offline clients' pending "your seat is gone" reasons, by token. */
+  const notices = new Map<string, ClosedReason>();
   let closedCount = 0;
   const room = new Room('ABCDE', {
     clock,
     rand: createRng(opts.seed ?? 7),
     timing: opts.timing ?? T,
     decideBot: opts.decideBot,
-    onTokenReleased: (t) => released.push(t),
+    onTokenReleased: (t, notice) => {
+      released.push(t);
+      if (notice) notices.set(t, notice);
+    },
     onClosed: () => closedCount++,
     onError: (err) => {
       throw err;
@@ -39,7 +44,7 @@ function setup(opts: { decideBot?: DecideBot; timing?: ServerTiming; seed?: numb
     if (!res.ok) throw new Error(`join failed: ${res.error}`);
     return { id: res.playerId, conn, token };
   };
-  return { clock, room, released, closed: () => closedCount, join };
+  return { clock, room, released, notices, closed: () => closedCount, join };
 }
 
 function game(room: Room): GameState {
@@ -52,6 +57,13 @@ function player(room: Room, id: string) {
   const p = room.view(id).players.find((x) => x.id === id);
   if (!p) throw new Error(`no seat ${id}`);
   return p;
+}
+
+/** The seat's rejoin key, as its own client received it. */
+function keyOf(h: Human): string {
+  const key = h.conn.lastRoom?.rejoinKey;
+  if (!key) throw new Error(`no rejoin key for ${h.id}`);
+  return key;
 }
 
 function logTypes(events: readonly LoggedEvent[]): string[] {
@@ -169,7 +181,7 @@ describe('Room — lobby', () => {
   });
 
   it('removes a disconnected lobby player after the grace period unless they come back', () => {
-    const { room, join, clock, released } = setup();
+    const { room, join, clock, released, notices } = setup();
     const host = join('Host');
     const b = join('B');
     const c = join('C');
@@ -183,6 +195,8 @@ describe('Room — lobby', () => {
     const ids = room.view(host.id).players.map((p) => p.id);
     expect(ids).toEqual([host.id, b.id]);
     expect(released).toEqual([c.token]);
+    // Removed for being offline too long → 'expired' (a voluntary leave stays 'left').
+    expect(notices.get(c.token)).toBe('expired');
     expect(back.lastRoom?.youId).toBe(b.id);
   });
 
@@ -397,39 +411,168 @@ describe('Room — game loop', () => {
     expect(back.lastRoom?.youId).toBe(b.id);
   });
 
-  it('leave mid-game → seat left + bot-controlled; rejoin by name reclaims it', () => {
+  it('leave mid-game → seat left + bot-controlled; only its rejoin key reclaims it', () => {
     const { room, a, b, released } = twoHumans();
+    const bKey = keyOf(b);
     expect(room.leave(b.id)).toEqual({ ok: true });
     expect(b.conn.closedReasons).toEqual(['left']);
     expect(released).toContain(b.token);
     expect(player(room, b.id)).toMatchObject({ left: true, botControlled: true, connected: false });
     expect(a.conn.lastRoom?.players.find((p) => p.id === b.id)?.left).toBe(true);
 
+    // The owner's name is public: it proves nothing.
     const stranger = new FakeConnection('stranger');
-    expect(room.join('token-stranger-1', stranger, { name: 'Mallory' })).toEqual({
+    expect(room.join('token-stranger-1', stranger, { name: 'BOB' })).toEqual({ ok: false, error: 'game_in_progress' });
+    expect(room.join('token-stranger-1', stranger, { name: 'Bob', rejoinKey: 'A'.repeat(16) })).toEqual({
       ok: false,
-      error: 'game_in_progress',
+      error: 'bad_rejoin_key',
     });
+    expect(stranger.sent).toEqual([]);
+    expect(player(room, b.id)).toMatchObject({ left: true, botControlled: true });
+
     const back = new FakeConnection('bob-new-device');
-    const res = room.join('token-bob-new-1', back, { name: 'BOB' });
+    const res = room.join('token-bob-new-1', back, { rejoinKey: bKey });
     expect(res).toEqual({ ok: true, playerId: b.id });
     expect(player(room, b.id)).toMatchObject({ left: false, botControlled: false, connected: true });
     expect(room.playerIdForToken('token-bob-new-1')).toBe(b.id);
     expect(back.lastGame?.resync).toBe(true);
-    // A connected seat cannot be claimed by name.
+    expect(back.lastRoom).toMatchObject({ youId: b.id, rejoinKey: bKey });
+  });
+
+  it('a reclaimed left seat is played by its human again, not by the bot', () => {
+    const { room, a, b, clock } = twoHumans();
+    const bKey = keyOf(b);
+    room.leave(b.id);
+    const back = new FakeConnection('bob-back');
+    room.join('token-bob-back-1', back, { rejoinKey: bKey });
+    // Make it B's turn, then give a bot more than its maximum think time: nothing may happen.
+    if (game(room).actorId !== b.id) room.move(a.id, { type: 'action', action: 'income' }, game(room).phaseSeq);
+    const g0 = game(room);
+    expect(g0.actorId).toBe(b.id);
+    clock.advance(Math.max(T.botThinkMs.normal[1], MIN_PHASE_SETTLE_MS) + 1);
+    expect(game(room).phaseSeq).toBe(g0.phaseSeq);
+    expect(back.lastGame?.view.prompt?.kind).toBe('choose_action');
+    expect(room.move(b.id, { type: 'action', action: 'income' }, g0.phaseSeq)).toEqual({ ok: true });
+  });
+
+  it('reclaims a disconnected seat with its key from a new token: full private resync, old token told "replaced"', () => {
+    const { room, b, released, notices, clock } = twoHumans();
+    const bKey = keyOf(b);
+    room.detach(b.id, b.conn);
+    // No key / someone else's guess: refused, and nothing about the game is sent.
+    const hijacker = new FakeConnection('hijacker');
+    expect(room.join('token-hijacker1', hijacker, { name: 'bob' })).toEqual({ ok: false, error: 'game_in_progress' });
+    expect(room.join('token-hijacker1', hijacker, { name: 'bob', rejoinKey: bKey.slice(0, -1) })).toEqual({
+      ok: false,
+      error: 'bad_rejoin_key',
+    });
+    expect(hijacker.sent).toEqual([]);
+
+    const phone = new FakeConnection('bob-phone');
+    expect(room.join('token-bob-phone', phone, { name: 'Whatever', rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+    expect(released).toContain(b.token);
+    expect(notices.get(b.token)).toBe('replaced');
+    expect(room.playerIdForToken(b.token)).toBeNull();
+    expect(room.playerIdForToken('token-bob-phone')).toBe(b.id);
+    expect(player(room, b.id).name).toBe('Bob'); // the profile is ignored on a reclaim
+    const st = phone.lastGame!;
+    expect(st).toMatchObject({ resync: true, events: [] });
+    expect(st.view.viewerId).toBe(b.id);
+    const own = game(room).players.find((p) => p.id === b.id)!;
+    expect(st.view.players.find((p) => p.id === b.id)!.influences.map((i) => i.character)).toEqual(
+      own.influences.map((i) => i.card.character),
+    );
+    // The pending bot takeover was cancelled.
+    clock.advance(T.reconnectGraceMs);
+    expect(player(room, b.id)).toMatchObject({ connected: true, botControlled: false });
+  });
+
+  it('reclaims a bot-controlled seat after the grace period', () => {
+    const { room, b, clock } = twoHumans();
+    const bKey = keyOf(b);
+    room.detach(b.id, b.conn);
+    clock.advance(T.reconnectGraceMs);
+    expect(player(room, b.id).botControlled).toBe(true);
+    const phone = new FakeConnection('bob-phone');
+    expect(room.join('token-bob-phone2', phone, { rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+    expect(player(room, b.id)).toMatchObject({ connected: true, botControlled: false, left: false });
+  });
+
+  it('reclaims a still-connected seat with its key: the other socket is told "replaced"', () => {
+    const { room, a, b } = twoHumans();
+    const bKey = keyOf(b);
+    // A connected seat is never reclaimable without the key.
     expect(room.join('token-bob-third', new FakeConnection(), { name: 'Bob' })).toEqual({
       ok: false,
       error: 'game_in_progress',
     });
+    const laptop = new FakeConnection('bob-laptop');
+    expect(room.join('token-bob-laptop', laptop, { rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+    expect(b.conn.closedReasons).toEqual(['replaced']);
+    expect(room.playerIdForToken(b.token)).toBeNull();
+    expect(laptop.lastGame?.view.viewerId).toBe(b.id);
+    expect(player(room, b.id).connected).toBe(true);
+    // Alice's own key reclaims only Alice's seat — never somebody else's.
+    const aKey = keyOf(a);
+    const aTab = new FakeConnection('alice-tab');
+    expect(room.join('token-alice-tab', aTab, { rejoinKey: aKey })).toEqual({ ok: true, playerId: a.id });
+    expect(room.playerIdForToken('token-bob-laptop')).toBe(b.id);
   });
 
-  it('reclaims a merely disconnected seat by name and releases the old token', () => {
-    const { room, b, released } = twoHumans();
-    room.detach(b.id, b.conn);
-    const res = room.join('token-bob-phone', new FakeConnection(), { name: 'bob' });
-    expect(res).toEqual({ ok: true, playerId: b.id });
-    expect(released).toContain(b.token);
-    expect(room.playerIdForToken(b.token)).toBeNull();
+  it('gives each human seat its own key and sends it only to that seat', () => {
+    const { room, join } = setup();
+    const a = join('Alice');
+    const b = join('Bob');
+    room.addBot(a.id, 'easy');
+    room.start(a.id);
+    const aKey = keyOf(a);
+    const bKey = keyOf(b);
+    expect(aKey).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(bKey).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(aKey).not.toBe(bKey);
+    const botId = room.view(a.id).players.find((p) => p.kind === 'bot')!.id;
+    expect(room.view(botId).rejoinKey).toBeUndefined();
+    expect(room.view('').rejoinKey).toBeUndefined();
+    for (const [me, other] of [
+      [a, bKey],
+      [b, aKey],
+    ] as const) {
+      const everything = JSON.stringify(me.conn.sent);
+      expect(everything).not.toContain(other);
+      for (const [st] of me.conn.of('game:state')) expect(JSON.stringify(st)).not.toContain(keyOf(me));
+    }
+  });
+
+  it('ignores the key in the lobby (normal join, name required)', () => {
+    const { room, join } = setup();
+    const host = join('Host');
+    const b = join('Bob');
+    const bKey = keyOf(b);
+    const res = room.join('token-bob-other', new FakeConnection(), { name: 'Bob', rejoinKey: bKey });
+    expect(res.ok && res.playerId).not.toBe(b.id);
+    expect(room.view(host.id).players.map((p) => p.name)).toEqual(['Host', 'Bob', 'Bob 2']);
+    expect(room.join('token-nameless', new FakeConnection(), { rejoinKey: bKey })).toEqual({
+      ok: false,
+      error: 'bad_request',
+    });
+  });
+
+  it('reclaims a seat that was left after the game ended; backToLobby keeps it', () => {
+    const { room, join, clock } = setup({ seed: 5 });
+    const host = join('Host');
+    const guest = join('Guest');
+    room.addBot(host.id, 'easy');
+    room.start(host.id);
+    clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000);
+    const key = keyOf(guest);
+    room.leave(guest.id);
+    expect(player(room, guest.id)).toMatchObject({ left: true, botControlled: false });
+    const back = new FakeConnection('guest-back');
+    expect(room.join('token-guest-back', back, { rejoinKey: key })).toEqual({ ok: true, playerId: guest.id });
+    expect(player(room, guest.id)).toMatchObject({ left: false, connected: true });
+    expect(back.lastGame?.view.phase.kind).toBe('game_over');
+    expect(room.backToLobby(host.id)).toEqual({ ok: true });
+    expect(room.view(host.id).players.some((p) => p.id === guest.id)).toBe(true);
   });
 
   it('passes host when the host leaves mid-game and deletes the room once every human left', () => {
@@ -497,6 +640,74 @@ describe('Room — game loop', () => {
     clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000);
     expect(room.view(guest.id).hostId).toBe(guest.id);
     expect(room.backToLobby(guest.id)).toEqual({ ok: true });
+  });
+
+  it('hands the host role to a returning human when the game ended while every human was offline', () => {
+    // Long empty-room timeout so the bots can finish the game while nobody is connected.
+    const timing: ServerTiming = { ...T, emptyRoomDeleteMs: 24 * 3_600_000 };
+    const { room, join, clock } = setup({ seed: 13, timing });
+    const host = join('Host');
+    const guest = join('Guest');
+    room.addBot(host.id, 'easy');
+    room.addBot(host.id, 'easy');
+    room.start(host.id);
+    room.detach(host.id, host.conn);
+    room.detach(guest.id, guest.conn);
+    expect(clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000)).toBe(true);
+    expect(room.view(guest.id).hostId).toBe(host.id); // nobody was here to take it
+
+    const back = new FakeConnection('guest-back');
+    room.attach(guest.id, back);
+    expect(back.lastRoom?.hostId).toBe(guest.id);
+    expect(room.backToLobby(guest.id)).toEqual({ ok: true });
+  });
+
+  it('keeps the host role when the host is the one who comes back after game over', () => {
+    const timing: ServerTiming = { ...T, emptyRoomDeleteMs: 24 * 3_600_000 };
+    const { room, join, clock } = setup({ seed: 13, timing });
+    const host = join('Host');
+    const guest = join('Guest');
+    room.addBot(host.id, 'easy');
+    room.start(host.id);
+    room.detach(host.id, host.conn);
+    room.detach(guest.id, guest.conn);
+    expect(clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000)).toBe(true);
+    room.attach(host.id, new FakeConnection('host-back'));
+    expect(room.view(host.id).hostId).toBe(host.id);
+    // …and the guest arriving afterwards does not take it away from a present host.
+    room.attach(guest.id, new FakeConnection('guest-back'));
+    expect(room.view(host.id).hostId).toBe(host.id);
+  });
+
+  it('sends game:cleared (before room:state) to a client that reconnects after the room went back to the lobby', () => {
+    const { room, join, clock } = setup({ seed: 9 });
+    const host = join('Host');
+    const guest = join('Guest');
+    room.addBot(host.id, 'easy');
+    room.start(host.id);
+    expect(clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000)).toBe(true);
+    room.detach(guest.id, guest.conn); // drops on the game-over screen…
+    clock.advance(1000);
+    expect(room.backToLobby(host.id)).toEqual({ ok: true }); // …and misses the live game:cleared
+    expect(guest.conn.of('game:cleared')).toHaveLength(0);
+    clock.advance(4000);
+
+    const back = new FakeConnection('guest-back');
+    room.attach(guest.id, back);
+    const events = back.sent.map((e) => e.event);
+    expect(events).toContain('game:cleared');
+    expect(events).not.toContain('game:state');
+    expect(events.indexOf('game:cleared')).toBeLessThan(events.indexOf('room:state'));
+    expect(back.lastRoom?.status).toBe('lobby');
+  });
+
+  it('does not send game:cleared when re-attaching to a running game (full resync instead)', () => {
+    const { room, b } = twoHumans();
+    room.detach(b.id, b.conn);
+    const back = new FakeConnection('bob-back');
+    room.attach(b.id, back);
+    expect(back.of('game:cleared')).toHaveLength(0);
+    expect(back.lastGame?.resync).toBe(true);
   });
 
   it('rejects backToLobby while playing or from non-hosts', () => {

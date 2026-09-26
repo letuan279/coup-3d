@@ -137,6 +137,8 @@ describe('connection', () => {
     expect(await c.call('room:join', 'ABCDE')).toEqual({ ok: false, error: 'bad_request' });
     expect(await c.call('room:join', { code: 'abc', name: 'X' })).toEqual({ ok: false, error: 'room_not_found' });
     expect(await c.call('room:join', { code: 'ZZZZZ', name: 'X' })).toEqual({ ok: false, error: 'room_not_found' });
+    expect(await c.call('room:join', { code: 'ZZZZZ', name: 'X', rejoinKey: 42 })).toEqual({ ok: false, error: 'bad_request' });
+    expect(await c.call('room:join', { code: 'ZZZZZ', rejoinKey: 'no spaces!' })).toEqual({ ok: false, error: 'bad_request' });
     expect(await c.call('game:move', { move: { type: 'hack' }, phaseSeq: 1 })).toEqual({ ok: false, error: 'bad_request' });
     expect(await c.call('game:move', { move: { type: 'pass' }, phaseSeq: 'x' })).toEqual({ ok: false, error: 'bad_request' });
     expect(await c.call('game:move', { move: { type: 'pass' }, phaseSeq: 3 })).toEqual({ ok: false, error: 'not_in_room' });
@@ -317,28 +319,86 @@ describe('game', () => {
     );
   });
 
-  it('leave mid-game → bot plays the seat; rejoin by name reclaims it', async () => {
+  it('leave mid-game → bot plays the seat; only its rejoin key reclaims it, from a fresh token', async () => {
     const { host, code } = await createRoom('Keeper');
     const guest = await client();
     await guest.call('room:join', { code, name: 'Wanderer' });
     await host.call('room:start');
     await waitFor(() => guest.game, 1000, 'game');
     const guestId = guest.youId;
+    const key = guest.room?.rejoinKey;
+    expect(key).toMatch(/^[A-Za-z0-9_-]{16}$/);
     expect(await guest.call('room:leave')).toEqual({ ok: true });
     await waitFor(() => guest.closed.includes('left'), 1000, 'left');
     await waitFor(() => host.room?.players.find((p) => p.id === guestId && p.left && p.botControlled), 1000, 'left seat');
 
+    // Knowing the name (everyone does) is not enough; neither is a guessed key.
     const other = await client(newToken());
     expect(await other.call('room:join', { code, name: 'Stranger' })).toEqual({ ok: false, error: 'game_in_progress' });
-    expect(await other.call('room:join', { code, name: 'WANDERER' })).toEqual({ ok: true, code });
-    const st = await waitFor(() => other.game, 1000, 'resync');
+    expect(await other.call('room:join', { code, name: 'WANDERER' })).toEqual({ ok: false, error: 'game_in_progress' });
+    expect(await other.call('room:join', { code, name: 'Wanderer', rejoinKey: 'AAAAAAAAAAAAAAAA' })).toEqual({
+      ok: false,
+      error: 'bad_rejoin_key',
+    });
+    expect(other.games).toEqual([]);
+    expect(other.rooms).toEqual([]);
+
+    // The owner, on a new device (fresh token), with the key and no name.
+    const owner = await client(newToken());
+    expect(await owner.call('room:join', { code, rejoinKey: key })).toEqual({ ok: true, code });
+    const st = await waitFor(() => owner.game, 1000, 'resync');
     expect(st.resync).toBe(true);
-    expect(other.youId).toBe(guestId);
+    expect(owner.youId).toBe(guestId);
+    expect(owner.room?.rejoinKey).toBe(key);
+    expect(st.view.players.find((p) => p.id === guestId)!.influences.every((i) => i.character !== null)).toBe(true);
     await waitFor(
       () => host.room?.players.find((p) => p.id === guestId && !p.left && !p.botControlled && p.connected),
       1000,
       'reclaimed',
     );
+    assertNoHiddenInfo(owner);
+    // Nobody else ever received the guest's key.
+    expect(JSON.stringify(host.rooms)).not.toContain(key);
+    expect(JSON.stringify(host.games)).not.toContain(key);
+  });
+
+  it('an opponent cannot take a disconnected seat by name; the owner reclaims it with the key and the old tab is replaced', async () => {
+    const { host, code } = await createRoom('Alice');
+    const bob = await client();
+    await bob.call('room:join', { code, name: 'Bob' });
+    await host.call('room:addBot', { level: 'normal' });
+    await host.call('room:settings', { turnSeconds: 90 }); // keep the game running during the test
+    await host.call('room:start');
+    await waitFor(() => bob.game, 1000, 'game');
+    const bobId = bob.youId;
+    const key = bob.room!.rejoinKey!;
+    const bobCards = bob.game!.view.players.find((p) => p.id === bobId)!.influences.map((i) => i.character);
+    expect(bobCards.every((c) => c !== null)).toBe(true);
+
+    // Bob's connection drops; Alice opens an incognito tab (fresh token) and types his name.
+    bob.close();
+    await waitFor(() => host.room?.players.find((p) => p.id === bobId)?.connected === false, 1000, 'bob offline');
+    const incognito = await client();
+    expect(await incognito.call('room:join', { code, name: 'bob' })).toEqual({ ok: false, error: 'game_in_progress' });
+    expect(await incognito.call('room:join', { code, name: 'Bob', rejoinKey: key.slice(0, 12) })).toEqual({
+      ok: false,
+      error: 'bad_rejoin_key',
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(incognito.games).toEqual([]); // never sees Bob's hidden cards
+    expect(host.room?.players.find((p) => p.id === bobId)?.connected).toBe(false);
+
+    // Bob is back on his own token, then moves to his phone with the rejoin link.
+    const bobBack = await client(bob.token);
+    await waitFor(() => bobBack.game?.resync, 1000, 'resync');
+    const phone = await client();
+    expect(await phone.call('room:join', { code, name: 'Phone', rejoinKey: key })).toEqual({ ok: true, code });
+    await waitFor(() => bobBack.closed.includes('replaced'), 1000, 'old tab replaced');
+    const st = await waitFor(() => phone.game, 1000, 'phone resync');
+    expect(st.view.viewerId).toBe(bobId);
+    expect(st.view.players.find((p) => p.id === bobId)!.influences.map((i) => i.character)).toEqual(bobCards);
+    expect(await bobBack.call('room:leave')).toEqual({ ok: false, error: 'not_in_room' });
+    assertNoHiddenInfo(phone);
   });
 
   it('relays emotes with a cooldown', async () => {

@@ -5,7 +5,8 @@
  */
 import { memo, type RefObject } from 'react';
 import type { SeatModel, SceneMode } from '../sceneModel';
-import { useT } from '../../i18n';
+import { charKey, useT } from '../../i18n';
+import { getCharacterIconUrl } from '../../art/cardArt';
 import { SpeechBubble } from './SpeechBubble';
 
 export const RING_R = 15;
@@ -89,13 +90,9 @@ function PlateCard(p: NameplateProps) {
               <>
                 <span className="sc-coin" aria-hidden />
                 <span className="sc-plate__coins">{seat.coins}</span>
-                <span className="sc-pips" title={t('scene.plate.cards', { n: seat.hiddenCount })}>
-                  {seat.influences.map((inf) => (
-                    <i key={inf.slot} className={inf.revealed ? 'is-lost' : ''} />
-                  ))}
-                </span>
               </>
             )}
+            <Pips seat={seat} />
           </div>
         )}
         {p.mode === 'lobby' && p.wins > 0 && (
@@ -121,6 +118,29 @@ function PlateCard(p: NameplateProps) {
       )}
       {p.targetable && <span className="sc-plate__pick">{t('scene.plate.pickTarget')}</span>}
     </div>
+  );
+}
+
+/** Hidden cards as coral pips; lost ones show which character was revealed (card counting). */
+function Pips({ seat }: { seat: SeatModel }) {
+  const t = useT();
+  return (
+    <span className="sc-pips" title={t('scene.plate.cards', { n: seat.hiddenCount })}>
+      {seat.influences.map((inf) => {
+        if (!inf.revealed) return <i key={inf.slot} />;
+        if (!inf.character) return <i key={inf.slot} className="is-lost" />;
+        const name = t(charKey(inf.character));
+        return (
+          <i
+            key={inf.slot}
+            className={`is-lost is-shown sc-pip--${inf.character}`}
+            style={{ backgroundImage: `url(${getCharacterIconUrl(inf.character)})` }}
+            title={t('scene.plate.revealed', { char: name })}
+            aria-label={t('scene.plate.revealed', { char: name })}
+          />
+        );
+      })}
+    </span>
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameEvent } from '../types';
-import { buildKnowledge, holdProbability, isCertainBluff, pAtLeastOne } from './knowledge';
+import { blockHabit, buildKnowledge, holdProbability, isCertainBluff, pAtLeastOne } from './knowledge';
 import { LEVEL_TUNING } from './personality';
 import { actionEvent, buildView, chooseActionPrompt, declared } from './test-helpers';
 import type { SeatSpec } from './test-helpers';
@@ -135,5 +135,107 @@ describe('buildKnowledge', () => {
     const K = knowledge(log);
     expect(K.players.get('c')!.soft.captain).toBeLessThan(1);
     expect(holdProbability(K, 'c', 'captain', FULL)).toBeLessThan(holdProbability(knowledge(), 'c', 'captain', FULL));
+  });
+});
+
+describe('declined Tax (bot-3)', () => {
+  const coins = (from: string, to: string, amount: number, reason: 'income' | 'steal' | 'tax'): GameEvent => ({
+    type: 'coins',
+    from,
+    to,
+    amount,
+    reason,
+  });
+
+  it('flags a player who took another action with under 7 coins, until their hand changes', () => {
+    let K = knowledge([actionEvent(declared('income', 'a')), coins('treasury', 'a', 1, 'income')]);
+    expect(K.players.get('a')!.declinedTax).toBe(true);
+    expect(K.players.get('b')!.declinedTax).toBe(false);
+    K = knowledge([
+      actionEvent(declared('income', 'a')),
+      { type: 'exchange_draw', playerId: 'a', count: 2 },
+      { type: 'exchange_done', playerId: 'a', returned: 2 },
+    ]);
+    expect(K.players.get('a')!.declinedTax).toBe(false);
+    K = knowledge([
+      actionEvent(declared('foreign_aid', 'a')),
+      { type: 'card_replaced', playerId: 'a', slot: 0, character: 'captain' },
+    ]);
+    expect(K.players.get('a')!.declinedTax).toBe(false);
+  });
+
+  it('does not flag Tax itself, a rich player, or a steal that keeps a rival out of coup range', () => {
+    const rich: SeatSpec[] = seats().map((p) => (p.id === 'a' ? { ...p, coins: 8 } : p));
+    expect(knowledge([actionEvent(declared('tax', 'a'))]).players.get('a')!.declinedTax).toBe(false);
+    expect(knowledge([actionEvent(declared('income', 'a'))], rich).players.get('a')!.declinedTax).toBe(false);
+    // c had 8 coins when a stole 2 of them (the view shows the balances after the steal).
+    const after: SeatSpec[] = seats().map((p) => (p.id === 'c' ? { ...p, coins: 6 } : p.id === 'a' ? { ...p, coins: 4 } : p));
+    const K = knowledge([actionEvent(declared('steal', 'a', 'c')), coins('c', 'a', 2, 'steal')], after);
+    expect(K.players.get('a')!.declinedTax).toBe(false);
+  });
+
+  it('makes hard doubt the Duke of a player who declined Tax', () => {
+    const flagged = knowledge([actionEvent(declared('income', 'a')), coins('treasury', 'a', 1, 'income')]);
+    expect(holdProbability(flagged, 'a', 'duke', FULL)).toBeLessThan(holdProbability(knowledge(), 'a', 'duke', FULL));
+    // Normal does not read this tell.
+    expect(holdProbability(flagged, 'a', 'duke', LEVEL_TUNING.normal.depth)).toBeCloseTo(
+      holdProbability(knowledge(), 'a', 'duke', LEVEL_TUNING.normal.depth),
+      10,
+    );
+  });
+});
+
+describe('challenge and block records', () => {
+  it("records how an assassin treats the Contessa blocks of its own assassinations (bot-4)", () => {
+    const K = knowledge([
+      actionEvent(declared('assassinate', 'a', 'c')),
+      { type: 'block', blockerId: 'c', character: 'contessa', actorId: 'a', action: 'assassinate' },
+      { type: 'challenge', challengerId: 'a', challengedId: 'c', character: 'contessa', against: 'block' },
+      actionEvent(declared('assassinate', 'b', 'c')),
+      { type: 'block', blockerId: 'c', character: 'contessa', actorId: 'b', action: 'assassinate' },
+      { type: 'challenge', challengerId: 'a', challengedId: 'c', character: 'contessa', against: 'block' },
+    ]);
+    const a = K.players.get('a')!;
+    expect(a.contessaChallengeChances).toBe(1);
+    expect(a.contessaChallenges).toBe(1); // the bystander call does not count
+    expect(a.challengesMade).toBe(2);
+    expect(K.players.get('b')!.contessaChallengeChances).toBe(1);
+    expect(K.players.get('b')!.contessaChallenges).toBe(0);
+  });
+
+  it('tracks claims that hit a player directly (aimed at them, or blocking them)', () => {
+    const K = knowledge([
+      actionEvent(declared('steal', 'a', 'c')),
+      { type: 'block', blockerId: 'c', character: 'captain', actorId: 'a', action: 'steal' },
+      { type: 'challenge', challengerId: 'a', challengedId: 'c', character: 'captain', against: 'block' },
+      actionEvent(declared('tax', 'b')),
+    ]);
+    // c was the steal's target, a was blocked; nobody was hit by b's Tax at a 4-player table.
+    expect(K.players.get('c')!.hotChances).toBe(1);
+    expect(K.players.get('a')!.hotChances).toBe(1);
+    expect(K.players.get('a')!.hotChallenges).toBe(1);
+    expect(K.players.get('bot')!.hotChances).toBe(0);
+  });
+
+  it('spots a player who blocks everything whatever they hold (bot-1)', () => {
+    const blocksAll: GameEvent[] = [
+      actionEvent(declared('steal', 'b', 'a')),
+      { type: 'block', blockerId: 'a', character: 'captain', actorId: 'b', action: 'steal' },
+      actionEvent(declared('assassinate', 'c', 'a')),
+      { type: 'block', blockerId: 'a', character: 'contessa', actorId: 'c', action: 'assassinate' },
+    ];
+    const K = knowledge(blocksAll);
+    expect(blockHabit(K.players.get('a')!)).toBeGreaterThan(0.25);
+    // One kind of block says nothing: a real Captain blocks every steal.
+    expect(blockHabit(knowledge(blocksAll.slice(0, 2)).players.get('a')!)).toBe(0);
+    // Letting a worthwhile steal through rules the habit out.
+    const declined = knowledge([
+      actionEvent(declared('steal', 'c', 'a')),
+      { type: 'action_resolved', actorId: 'c', action: 'steal', targetId: 'a' },
+      { type: 'coins', from: 'a', to: 'c', amount: 2, reason: 'steal' },
+      ...blocksAll,
+    ]);
+    expect(declined.players.get('a')!.declinedBlocks).toBe(1);
+    expect(blockHabit(declined.players.get('a')!)).toBe(0);
   });
 });

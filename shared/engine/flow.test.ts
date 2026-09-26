@@ -93,7 +93,14 @@ describe('responder rules', () => {
   });
 
   it('rejects the blocker challenging its own block; the actor may challenge the block', () => {
-    const blocked = act(declaredSteal(), 'p1', block('captain')).state;
+    const declaredBlock = act(declaredSteal(), 'p1', block('captain')).state;
+    // Action window still open for p2: the blocker has responded, the actor is not a responder.
+    expect(applyMove(declaredBlock, 'p1', CHALLENGE)).toEqual({ ok: false, error: 'not_your_decision' });
+    expect(applyMove(declaredBlock, 'p1', block('ambassador'))).toEqual({ ok: false, error: 'not_your_decision' });
+    expect(applyMove(declaredBlock, 'p0', CHALLENGE)).toEqual({ ok: false, error: 'not_your_decision' });
+    expect(applyMove(declaredBlock, 'p2', block('captain'))).toEqual({ ok: false, error: 'invalid_move' });
+    const blocked = act(declaredBlock, 'p2', PASS).state;
+    expect(blocked.phase.kind).toBe('block_response');
     expect(applyMove(blocked, 'p1', CHALLENGE)).toEqual({ ok: false, error: 'not_your_decision' });
     expect(applyMove(blocked, 'p2', block('duke'))).toEqual({ ok: false, error: 'invalid_move' });
     const { events } = act(blocked, 'p0', CHALLENGE);
@@ -178,7 +185,8 @@ describe('prompts', () => {
     s = play(s, [
       ['p0', steal('p1')],
       ['p1', block('captain')],
-      ['p2', PASS],
+      ['p2', PASS], // action window
+      ['p2', PASS], // block window
     ]).state;
     expect(getPrompt(s, 'p2')).toBeNull();
     expect(getPrompt(s, 'p0')).toEqual({ kind: 'respond_block' });

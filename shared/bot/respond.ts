@@ -6,12 +6,13 @@
  */
 import { ACTIONS, COUP_COST } from '../constants';
 import type { Character, DeclaredAction, DeclaredBlock, GameView, Move, Prompt } from '../types';
-import { holdProbability, isCertainBluff, roundLength } from './knowledge';
+import { blockHabit, holdProbability, isCertainBluff, roundLength } from './knowledge';
 import type { PlayerIntel } from './knowledge';
+import type { BeliefDepth } from './personality';
 import { botLossForOpponent, challengeRisk } from './risk';
 import { noise } from './situation';
 import type { Situation } from './situation';
-import { effectValue, oppLossGain, selfLoss } from './value';
+import { effectValue, oppLossGain, pTargetsMe, selfLoss } from './value';
 
 type RespondActionPrompt = Extract<Prompt, { kind: 'respond_action' }>;
 
@@ -50,6 +51,15 @@ function claimSeq(view: GameView, via: 'action' | 'block', playerId: string, c: 
   return undefined;
 }
 
+/** Beliefs from card counting (and caught bluffs) alone, ignoring what the player claims. */
+const CARD_COUNTING_ONLY: BeliefDepth = {
+  claims: false,
+  lacks: true,
+  inconsistency: false,
+  history: false,
+  soft: false,
+};
+
 /** Probability that `player`'s current claim of `c` is a bluff, bent by the bot's suspicion. */
 function bluffProbability(
   S: Situation,
@@ -59,7 +69,13 @@ function bluffProbability(
   flags: { forced?: boolean; desperate?: boolean } = {},
 ): number {
   const seq = claimSeq(S.view, via, player.id, c);
-  const q = 1 - holdProbability(S.K, player.id, c, S.depth, { claiming: true, claimSeq: seq, via, ...flags });
+  let hold = holdProbability(S.K, player.id, c, S.depth, { claiming: true, claimSeq: seq, via, ...flags });
+  if (via === 'block' && S.depth.history) {
+    // A player who blocks everything blocks with whatever it holds: only card counting is left.
+    const h = blockHabit(player);
+    if (h > 0) hold = (1 - h) * hold + h * holdProbability(S.K, player.id, c, CARD_COUNTING_ONLY);
+  }
+  const q = 1 - hold;
   // Hard bots trust their card counting more than their temperament.
   const temper = S.level === 'hard' ? 0.3 : 1;
   return Math.min(1, q * (1 + (S.persona.suspicion - 1) * temper));
@@ -101,8 +117,10 @@ function valueAfterCaughtBlock(S: Situation, act: DeclaredAction, effect: number
  * every opponent shares the gain, so claims that barely touch the bot are left alone.
  */
 function challengeMargin(S: Situation, act: DeclaredAction, effect: number): number {
+  // Heads-up the gain is not shared with anyone: only model error argues for caution.
+  if (S.K.opponents.length <= 1) return S.tune.duelChallengeMargin - stalematePressure(S);
   let m = S.tune.challengeMargin - stalematePressure(S);
-  if (act.targetId === S.me.id || S.K.opponents.length <= 1) return m;
+  if (act.targetId === S.me.id) return m;
   if (act.targetId) m += 0.06; // the victim is more motivated to call it
   const stakes = Math.min(1, Math.abs(effect) / 0.3);
   return m + 0.12 * (1 - stakes);
@@ -125,8 +143,19 @@ function blockStakes(S: Situation, act: DeclaredAction): Record<string, number> 
   return { [act.actorId]: stake };
 }
 
-function wantsToBluffBlock(S: Situation): boolean {
-  const willing = S.persona.bluffRate * S.tune.bluffScale * S.persona.aggression * 1.6;
+/**
+ * A caught Contessa bluff with two cards loses both (the assassination still lands), so it is
+ * made rarely enough that calling every such block does not pay — heads-up, where it ends the
+ * game on the spot, more rarely still.
+ */
+const CONTESSA_BLUFF_SCALE = 0.3;
+const CONTESSA_BLUFF_SCALE_DUEL = 0.15;
+
+function wantsToBluffBlock(S: Situation, act: DeclaredAction): boolean {
+  let willing = S.persona.bluffRate * S.tune.bluffScale * S.persona.aggression * 1.6;
+  if (act.type === 'assassinate' && S.me.hidden >= 2) {
+    willing *= S.K.opponents.length <= 1 ? CONTESSA_BLUFF_SCALE_DUEL : CONTESSA_BLUFF_SCALE;
+  }
   return S.rand() < Math.min(0.9, willing);
 }
 
@@ -135,7 +164,8 @@ export function respondToAction(S: Situation, prompt: RespondActionPrompt): Move
   if (!act) return PASS;
   const actor = S.K.players.get(act.actorId);
   const targetMe = act.targetId === S.me.id;
-  const effect = effectValue(S, act);
+  // The target may already have blocked while the window stays open to challenge the action.
+  const effect = effectValue(S, act) * chanceBlockFails(S);
   const L = selfLoss(S);
   const lethal = targetMe && act.type === 'assassinate' && S.me.hidden <= 1;
   const options: Scored[] = [];
@@ -171,10 +201,11 @@ export function respondToAction(S: Situation, prompt: RespondActionPrompt): Move
       if (S.K.unseen[ch] < 2 && S.level !== 'hard') continue;
       // With one card left a caught bluff is elimination: only hard bots, and only when safe.
       if (S.me.hidden <= 1 && S.level !== 'hard') continue;
-      if (!wantsToBluffBlock(S)) continue;
+      if (!wantsToBluffBlock(S, act)) continue;
     }
     const stakes = blockStakes(S, act);
-    const pb = challengeRisk(S, ch, { via: 'block', stakes, involved: act.actorId, forced: lethal });
+    const severe = act.type === 'assassinate' && S.me.hidden >= 2;
+    const pb = challengeRisk(S, ch, { via: 'block', stakes, involved: act.actorId, forced: lethal, severe });
     if (!lethal && S.me.hidden <= 1 && pb >= 0.1) continue;
     const value = pb * (-L + valueAfterCaughtBlock(S, act, effect));
     options.push({ move, value: value + noise(S) });
@@ -189,6 +220,23 @@ export function respondToAction(S: Situation, prompt: RespondActionPrompt): Move
   return best(options);
 }
 
+/** How often the blocked actor (or someone) calls a block that is a bluff. */
+const BLUFF_BLOCK_CALLED = 0.6;
+
+/**
+ * With a block already declared during the action's own response window, the action only
+ * lands if that block later fails: a bystander has less reason to fight the action itself.
+ * 1 when no block is pending (or the bot will surely call an impossible one).
+ */
+function chanceBlockFails(S: Situation): number {
+  const blk = S.view.phase.kind === 'action_response' ? S.view.pendingBlock : null;
+  if (!blk || blk.blockerId === S.me.id) return 1;
+  const blocker = S.K.players.get(blk.blockerId);
+  if (!blocker) return 1;
+  if (isCertainBluff(S.K, blocker.id, blk.character, S.depth)) return 1;
+  return bluffProbability(S, blocker, blk.character, 'block') * BLUFF_BLOCK_CALLED;
+}
+
 /** Value for the bot when a block turns out to be a bluff: blocker loses a card, then the action resolves. */
 function valueIfBlockFails(S: Situation, act: DeclaredAction, blocker: PlayerIntel): number {
   const caught = oppLossGain(S, blocker);
@@ -196,6 +244,19 @@ function valueIfBlockFails(S: Situation, act: DeclaredAction, blocker: PlayerInt
     return caught + (blocker.hidden >= 2 ? oppLossGain(S, blocker, blocker.hidden - 1) : 0);
   }
   return caught + effectValue(S, act);
+}
+
+/**
+ * Chance that letting a block of the bot's own action stand gets the bot eliminated: it is on its
+ * last card and the blocker keeps 7+ coins and will likely coup it next (0 when that is not the
+ * situation). Typically the anti-coup steal, or the desperate assassination, of a one-card bot.
+ */
+function doomIfBlockStands(S: Situation, act: DeclaredAction, blocker: PlayerIntel): number {
+  if (S.level === 'easy' || act.actorId !== S.me.id || S.me.hidden > 1) return 0;
+  if (blocker.coins < COUP_COST) return 0;
+  if (S.K.opponents.length <= 1) return 1;
+  const p = pTargetsMe(S, blocker);
+  return p >= 0.6 ? p : 0;
 }
 
 export function respondToBlock(S: Situation): Move {
@@ -213,8 +274,14 @@ export function respondToBlock(S: Situation): Move {
   const forced = act.type === 'assassinate' && act.targetId === blocker.id && blocker.hidden <= 1;
   const q = bluffProbability(S, blocker, blk.character, 'block', { forced: forced && S.level !== 'easy' });
   const L = selfLoss(S);
-  let margin = S.tune.challengeMargin - stalematePressure(S);
-  if (act.actorId !== S.me.id) margin += 0.08; // the blocked actor usually calls it
-  const value = q * valueIfBlockFails(S, act, blocker) + (1 - q) * -L - margin;
-  return value + noise(S) > 0 ? CHALLENGE : PASS;
+  const challenge = q * valueIfBlockFails(S, act, blocker) + (1 - q) * -L;
+
+  // Passing is (likely) elimination too: fight whenever calling the block is the better bet.
+  const doom = doomIfBlockStands(S, act, blocker);
+  if (doom > 0) return q > 0 && challenge > -doom * L ? CHALLENGE : PASS;
+
+  // The blocked actor is the one who calls blocks; bystanders leave it to them.
+  const base = act.actorId === S.me.id ? S.tune.blockedActorMargin : S.tune.challengeMargin + 0.08;
+  const margin = base - stalematePressure(S);
+  return challenge - margin + noise(S) > 0 ? CHALLENGE : PASS;
 }

@@ -12,7 +12,8 @@ import { describeEvent } from '../log/describe';
 import { formatSegs, seg, type Seg } from '../log/rich';
 import { useHud } from '../hudStore';
 import { useAvatarOf, useMe, useSelfId } from '../hooks';
-import { respond } from '../moves';
+import { hotkeyBlockCharacter, respond } from '../moves';
+import { describeBlockedAction } from './phaseText';
 
 interface Situation {
   segs: Seg[];
@@ -36,6 +37,21 @@ export const ResponsePanel = memo(function ResponsePanel() {
     const { prompt, phase, players } = game;
     if (prompt.kind === 'respond_action' && phase.kind === 'action_response') {
       const a = phase.action;
+      const block = game.pendingBlock;
+      if (block) {
+        // The target already blocked; you may still challenge the ACTION's claim (or let it go).
+        const name = (id: string) => players.find((p) => p.id === id)?.name ?? '???';
+        return {
+          segs: describeBlockedAction(game, block, selfId, t),
+          claimantId: a.actorId,
+          question: a.claim
+            ? t('resp.q.challengeBlocked', { char: t(`char.${a.claim}`), actor: name(a.actorId) })
+            : t('resp.q.believe'),
+          targetIsYou: false,
+          canChallenge: prompt.canChallenge,
+          blockCharacters: prompt.blockCharacters,
+        };
+      }
       const d = describeEvent({ type: 'action', actorId: a.actorId, action: a.type, targetId: a.targetId, claim: a.claim }, players, t, { selfId });
       const q = prompt.canChallenge
         ? prompt.blockCharacters.length > 0
@@ -75,6 +91,8 @@ export const ResponsePanel = memo(function ResponsePanel() {
   const claimantAvatar = useAvatarOf(sit?.claimantId);
   if (!sit) return null;
   const held = new Set(me?.influences.filter((i) => !i.revealed).map((i) => i.character));
+  // Same rule as the B hotkey, so the badge sits on the button B actually presses.
+  const hotkeyChar = hotkeyBlockCharacter(sit.blockCharacters, me?.influences);
 
   return (
     <div className="response-panel">
@@ -99,7 +117,7 @@ export const ResponsePanel = memo(function ResponsePanel() {
             <kbd className="kbd-badge">C</kbd>
           </button>
         )}
-        {sit.blockCharacters.map((c, i) => (
+        {sit.blockCharacters.map((c) => (
           <button
             key={c}
             type="button"
@@ -108,7 +126,7 @@ export const ResponsePanel = memo(function ResponsePanel() {
             disabled={busy}
             onClick={() => respond.block(c)}
             aria-label={t('resp.blockWith', { char: t(`char.${c}`) })}
-            aria-keyshortcuts={i === 0 ? 'B' : undefined}
+            aria-keyshortcuts={c === hotkeyChar ? 'B' : undefined}
           >
             <img className="resp-btn__emblem" src={getCharacterIconUrl(c)} alt="" draggable={false} />
             <span className="resp-btn__stack">
@@ -116,7 +134,7 @@ export const ResponsePanel = memo(function ResponsePanel() {
               <span>{t(`char.${c}`)}</span>
             </span>
             {!held.has(c) && <span className="resp-btn__bluff">{t('act.bluffTag')}</span>}
-            {i === 0 && <kbd className="kbd-badge">B</kbd>}
+            {c === hotkeyChar && <kbd className="kbd-badge">B</kbd>}
           </button>
         ))}
         <button type="button" className="btn btn-teal resp-btn" disabled={busy} onClick={respond.pass}>

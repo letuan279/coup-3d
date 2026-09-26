@@ -7,6 +7,8 @@ import { create } from 'zustand';
 export interface HudState {
   /** A move was sent and has not been acknowledged yet. */
   moveInFlight: boolean;
+  /** phaseSeq the in-flight move was sent for (the lock is dropped as soon as the phase changes). */
+  moveSeq: number | null;
   menuOpen: boolean;
   emoteOpen: boolean;
   leaveConfirm: boolean;
@@ -19,6 +21,7 @@ export interface HudState {
 
 export const useHud = create<HudState>((set) => ({
   moveInFlight: false,
+  moveSeq: null,
   menuOpen: false,
   emoteOpen: false,
   leaveConfirm: false,

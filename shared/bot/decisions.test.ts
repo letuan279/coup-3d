@@ -532,3 +532,111 @@ describe('losing influence and exchanging', () => {
     }
   });
 });
+
+describe('reviewed exploits', () => {
+  it('bluffs Contessa with two cards only now and then, and never against a known Contessa caller (bot-4)', () => {
+    const called: GameEvent[] = [
+      actionEvent(declared('assassinate', 'a', 'b')),
+      { type: 'block', blockerId: 'b', character: 'contessa', actorId: 'a', action: 'assassinate' },
+      { type: 'challenge', challengerId: 'a', challengedId: 'b', character: 'contessa', against: 'block' },
+      { type: 'challenge_result', challengerId: 'a', challengedId: 'b', character: 'contessa', challengedHadCard: true, slot: 0 },
+      { type: 'card_replaced', playerId: 'b', slot: 0, character: 'contessa' },
+    ];
+    for (const players of [2, 3]) {
+      let fresh = 0;
+      let known = 0;
+      const ids = Array.from({ length: 40 }, (_, k) => `bot-${k}`);
+      for (const me of ids) {
+        const seats: SeatSpec[] = [
+          { id: me, cards: ['duke', 'captain'], coins: 2 },
+          { id: 'a', cards: ['assassin', 'ambassador'], coins: 0 },
+        ];
+        if (players === 3) seats.push({ id: 'b', cards: ['duke', 'captain'], coins: 3 });
+        const kill = declared('assassinate', 'a', me);
+        const view = (history: GameEvent[]): GameView =>
+          buildView({ me, seats, prompt: respondActionPrompt(kill, me), pendingAction: kill, log: [...history, actionEvent(kill)] });
+        const bluffs = (m: Move): boolean => m.type === 'block';
+        fresh += share(movesFor(view([]), 'normal', 25), bluffs);
+        if (players === 3) known += share(movesFor(view(called), 'normal', 25), bluffs);
+      }
+      fresh /= ids.length;
+      known /= ids.length;
+      // A caught bluff costs both cards: bluff rarely (less still heads-up), but not never.
+      expect(fresh).toBeGreaterThan(0.05);
+      expect(fresh).toBeLessThan(players === 2 ? 0.22 : 0.4);
+      expect(known).toBe(0);
+    }
+  });
+
+  it('calls the blocks of a player who blocks every kind of action (bot-1)', () => {
+    const seats: SeatSpec[] = [
+      { id: 'bot', cards: ['captain', 'duke'], coins: 2 },
+      { id: 'a', cards: ['contessa', 'ambassador'], coins: 4 },
+    ];
+    const steal = declared('steal', 'bot', 'a');
+    const blocksEverything: GameEvent[] = [
+      actionEvent(declared('assassinate', 'bot', 'a')),
+      { type: 'block', blockerId: 'a', character: 'contessa', actorId: 'bot', action: 'assassinate' },
+      { type: 'action_blocked', actorId: 'bot', action: 'assassinate', blockerId: 'a', character: 'contessa' },
+      actionEvent(declared('foreign_aid', 'bot')),
+      { type: 'block', blockerId: 'a', character: 'duke', actorId: 'bot', action: 'foreign_aid' },
+      { type: 'action_blocked', actorId: 'bot', action: 'foreign_aid', blockerId: 'a', character: 'duke' },
+    ];
+    const view = (history: GameEvent[]): GameView =>
+      buildView({
+        me: 'bot',
+        seats,
+        prompt: { kind: 'respond_block' },
+        pendingAction: steal,
+        pendingBlock: { blockerId: 'a', character: 'ambassador' },
+        log: [
+          ...history,
+          actionEvent(steal),
+          { type: 'block', blockerId: 'a', character: 'ambassador', actorId: 'bot', action: 'steal' },
+        ],
+      });
+    const calls = (v: GameView): number => share(movesFor(v, 'hard'), (m) => m.type === 'challenge');
+    expect(calls(view(blocksEverything))).toBeGreaterThan(0.9);
+    expect(calls(view(blocksEverything))).toBeGreaterThan(calls(view([])));
+  });
+
+  it('never bluffs Duke after visibly declining Tax, and sometimes skips Tax with a real Duke (bot-3)', () => {
+    const noDuke: SeatSpec[] = [
+      { id: 'bot', cards: ['contessa', 'captain'], coins: 3 },
+      { id: 'a', cards: ['ambassador', 'assassin'], coins: 1 },
+      { id: 'b', cards: ['contessa', 'ambassador'], coins: 1 },
+    ];
+    const tookIncome: GameEvent[] = [
+      { type: 'turn_start', playerId: 'bot', turn: 1 },
+      actionEvent(declared('income', 'bot')),
+      { type: 'coins', from: 'treasury', to: 'bot', amount: 1, reason: 'income' },
+      { type: 'turn_start', playerId: 'a', turn: 2 },
+      { type: 'turn_start', playerId: 'b', turn: 3 },
+      { type: 'turn_start', playerId: 'bot', turn: 4 },
+    ];
+    const flagged = buildView({ me: 'bot', seats: noDuke, prompt: chooseActionPrompt(noDuke, 'bot'), log: tookIncome });
+    expect(share(movesFor(flagged, 'hard', 500), (m) => m.type === 'action' && m.action === 'tax')).toBe(0);
+
+    // A Duke holder with a clean steal available (the target let two steals through).
+    const duke: SeatSpec[] = [
+      { id: 'bot', cards: ['duke', 'captain'], coins: 2 },
+      { id: 'a', cards: ['contessa', 'assassin'], coins: 6 },
+      { id: 'b', cards: ['contessa', 'duke'], coins: 1 },
+    ];
+    const log: GameEvent[] = [];
+    for (let i = 0; i < 2; i++) {
+      log.push(
+        actionEvent(declared('steal', 'b', 'a')),
+        { type: 'action_resolved', actorId: 'b', action: 'steal', targetId: 'a' },
+        { type: 'coins', from: 'a', to: 'b', amount: 2, reason: 'steal' },
+        { type: 'coins', from: 'b', to: 'a', amount: 2, reason: 'refund' },
+      );
+    }
+    const mixed = buildView({ me: 'bot', seats: duke, prompt: chooseActionPrompt(duke, 'bot'), log });
+    const moves = movesFor(mixed, 'hard', 1000);
+    const steals = share(moves, (m) => m.type === 'action' && m.action === 'steal');
+    expect(steals).toBeGreaterThan(0.03);
+    expect(steals).toBeLessThan(0.25);
+    expect(share(moves, (m) => m.type === 'action' && m.action === 'tax') + steals).toBe(1);
+  });
+});

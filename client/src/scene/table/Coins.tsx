@@ -2,6 +2,11 @@
  * Every coin on the table — player stacks, the treasury pile and coins in flight — is ONE
  * InstancedMesh. Stacks lag behind the store while coins fly, so a 'coins' event visibly
  * moves coins from one pile to another in arcs.
+ *
+ * Invariants (so the piles can never drift from the store):
+ * - a pile shows `store count − coins still flying to it`, and "flying to it" is counted from
+ *   the queue itself — nothing is tracked separately;
+ * - coins that are not animated (queue full, tab hidden) simply appear at their destination.
  */
 import { useLayoutEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -9,12 +14,15 @@ import { CylinderGeometry, Euler, InstancedMesh, Matrix4, Quaternion, Vector3 } 
 import type { CoinParty } from '@shared/types';
 import { GeoBuilder } from '../geo';
 import { coinMat } from '../materials';
-import { CARD_RADIUS, LOCAL_CARD_RADIUS, SEAT_RADIUS, TABLE, TREASURY_POS, frameAt } from '../layout';
+import { TABLE } from '../layout';
 import { nowSec } from '../reactions';
+import { COIN_H, COIN_R, seatCoinSlot, treasuryCoinSlot } from './coinLayout';
 
 const CAPACITY = 72;
-const COIN_R = 0.058;
-const COIN_H = 0.017;
+/** Most coins animated at once; any more just land (a big burst is still readable). */
+export const MAX_FLIGHTS = 40;
+/** Coins drawn per pile at most (the treasury holds 50). */
+const PILE_MAX = 50;
 const FLIGHT_TIME = 0.62;
 const STAGGER = 0.085;
 
@@ -42,84 +50,101 @@ export interface CoinTableState {
 }
 
 interface Flight {
+  from: CoinParty;
   to: CoinParty;
+  /** Coins queued together by one event share a group; `k` = order of take-off in it. */
+  group: number;
+  k: number;
   start: number;
-  from: Vector3;
+  /**
+   * Take-off position. Resolved lazily on the first frame that sees the flight: the director
+   * queues flights right after the store update but before React commits it, so the source
+   * pile's count is only current by then (see `resolveTakeOffs`).
+   */
+  origin: Vector3;
+  resolved: boolean;
   spin: number;
 }
 
 // ── Module-level flight queue (fed by the event director) ──
 const flights: Flight[] = [];
-const pendingIn = new Map<CoinParty, number>();
+let groupSeq = 0;
 let latest: CoinTableState = { seats: [], treasury: 0 };
 let dirty = true;
 
+function pageHidden(): boolean {
+  return typeof document !== 'undefined' && document.hidden === true;
+}
+
+function storeCount(party: CoinParty): number {
+  return party === 'treasury' ? latest.treasury : latest.seats.find((s) => s.id === party)?.coins ?? 0;
+}
+
+/** Coins still in the air (or waiting to take off) towards `party`. */
+function incoming(party: CoinParty): number {
+  let n = 0;
+  for (const f of flights) if (f.to === party) n++;
+  return n;
+}
+
 function displayCount(party: CoinParty): number {
-  const actual = party === 'treasury' ? latest.treasury : latest.seats.find((s) => s.id === party)?.coins ?? 0;
-  return Math.max(0, actual - (pendingIn.get(party) ?? 0));
+  return Math.max(0, storeCount(party) - incoming(party));
 }
 
 export function queueCoinFlight(from: CoinParty, to: CoinParty, amount: number): void {
-  const fromSeatKnown = from === 'treasury' || latest.seats.some((s) => s.id === from);
-  const toSeatKnown = to === 'treasury' || latest.seats.some((s) => s.id === to);
-  if (!fromSeatKnown || !toSeatKnown || amount <= 0) return;
+  // rAF is paused in a background tab: nothing would fly, so let the piles snap instead.
+  if (amount <= 0 || pageHidden()) return;
+  const known = (p: CoinParty) => p === 'treasury' || latest.seats.some((s) => s.id === p);
+  if (!known(from) || !known(to)) return;
   const t0 = nowSec();
-  const base = displayCount(from);
-  for (let k = 0; k < amount && flights.length < 40; k++) {
-    const from3 = new Vector3();
-    stackSlot(from, base + amount - 1 - k, from3);
-    flights.push({ to, start: t0 + k * STAGGER, from: from3, spin: (k % 2 ? 1 : -1) * (6 + k) });
+  const group = ++groupSeq;
+  for (let k = 0; k < amount && flights.length < MAX_FLIGHTS; k++) {
+    flights.push({ from, to, group, k, start: t0 + k * STAGGER, origin: new Vector3(), resolved: false, spin: (k % 2 ? 1 : -1) * (6 + k) });
   }
-  pendingIn.set(to, (pendingIn.get(to) ?? 0) + Math.min(amount, 40));
   dirty = true;
 }
 
 export function resetCoinFlights(): void {
   flights.length = 0;
-  pendingIn.clear();
   dirty = true;
 }
 
-// ── Pile layouts ──
-
-const HEX: [number, number][] = [
-  [0, 0],
-  [1, 0],
-  [0.5, 0.87],
-  [-0.5, 0.87],
-  [-1, 0],
-  [-0.5, -0.87],
-  [0.5, -0.87],
-  [1.5, 0.87],
-];
-
-const seatFrame = frameAt(0);
-
 /** World position of the i-th coin of a pile. */
-function stackSlot(party: CoinParty, i: number, out: Vector3): Vector3 {
-  if (party === 'treasury') {
-    const per = 8;
-    const col = Math.floor(i / per) % HEX.length;
-    const lvl = i % per;
-    const [hx, hz] = HEX[col];
-    const jitter = ((col * 7 + lvl * 3) % 5) * 0.002;
-    return out.set(TREASURY_POS[0] + hx * COIN_R * 2.15 + jitter, TABLE.feltY + COIN_H * (lvl + 0.5), TREASURY_POS[1] + hz * COIN_R * 2.15);
-  }
+export function stackSlot(party: CoinParty, i: number, out: Vector3): Vector3 {
+  if (party === 'treasury') return treasuryCoinSlot(i, out);
   const seat = latest.seats.find((s) => s.id === party);
   if (!seat) return out.set(0, TABLE.feltY, 0);
-  frameAt(seat.angle, SEAT_RADIUS, seatFrame);
-  const per = 5;
-  const col = Math.floor(i / per);
-  const lvl = i % per;
-  const cx = col % 3;
-  const cr = Math.floor(col / 3);
-  const radius = (seat.isLocal ? LOCAL_CARD_RADIUS + 0.08 : CARD_RADIUS + 0.02) - cr * COIN_R * 2.1 + (cx === 1 ? COIN_R : 0);
-  const right = (seat.isLocal ? 0.5 : 0.46) + cx * COIN_R * 1.9;
-  return out.set(
-    seatFrame.outX * radius + seatFrame.rightX * right,
-    TABLE.feltY + COIN_H * (lvl + 0.5),
-    seatFrame.outZ * radius + seatFrame.rightZ * right,
-  );
+  return seatCoinSlot(seat.angle, seat.isLocal, i, out);
+}
+
+const aboveDisplay = new Map<CoinParty, number>();
+
+/**
+ * Gives new flights their take-off slot: the coins that left a pile were the top of it, i.e.
+ * right above what the pile displays now. Several new groups from one pile stack up in queue
+ * order (the earliest event took the highest coins), so walk the queue from the newest group.
+ */
+function resolveTakeOffs(): void {
+  aboveDisplay.clear();
+  for (let i = flights.length - 1; i >= 0; ) {
+    const f = flights[i];
+    if (f.resolved) {
+      i--;
+      continue;
+    }
+    let j = i;
+    while (j > 0 && flights[j - 1].group === f.group && !flights[j - 1].resolved) j--;
+    const size = i - j + 1;
+    const above = aboveDisplay.get(f.from) ?? 0;
+    const base = displayCount(f.from) + above;
+    for (let x = j; x <= i; x++) {
+      const g = flights[x];
+      stackSlot(g.from, Math.min(PILE_MAX - 1, base + (size - 1 - (g.k - flights[j].k))), g.origin);
+      g.resolved = true;
+    }
+    aboveDisplay.set(f.from, above + size);
+    i = j - 1;
+  }
 }
 
 const m4 = new Matrix4();
@@ -139,7 +164,7 @@ function put(m: InstancedMesh, pos: Vector3, rx: number, rz: number) {
 }
 
 function putPile(m: InstancedMesh, party: CoinParty) {
-  const count = Math.min(displayCount(party), 50);
+  const count = Math.min(displayCount(party), PILE_MAX);
   for (let i = 0; i < count; i++) put(m, stackSlot(party, i, p), 0, 0);
 }
 
@@ -148,11 +173,6 @@ export function Coins({ state }: { state: CoinTableState }) {
 
   useLayoutEffect(() => {
     latest = state;
-    // Drop pending counts that no longer make sense (e.g. after a resync).
-    for (const [party, n] of pendingIn) {
-      const actual = party === 'treasury' ? state.treasury : state.seats.find((s) => s.id === party)?.coins ?? 0;
-      if (n > actual) pendingIn.set(party, actual);
-    }
     dirty = true;
   }, [state]);
 
@@ -164,26 +184,23 @@ export function Coins({ state }: { state: CoinTableState }) {
     const now = nowSec();
     used = 0;
 
+    resolveTakeOffs();
     // Land finished flights first so their coins join the destination stacks this frame.
     for (let i = flights.length - 1; i >= 0; i--) {
-      const f = flights[i];
-      if (now - f.start >= FLIGHT_TIME) {
-        pendingIn.set(f.to, Math.max(0, (pendingIn.get(f.to) ?? 0) - 1));
-        flights.splice(i, 1);
-      }
+      if (now - flights[i].start >= FLIGHT_TIME) flights.splice(i, 1);
     }
     putPile(m, 'treasury');
     for (const s of latest.seats) putPile(m, s.id);
     for (const f of flights) {
       const k = (now - f.start) / FLIGHT_TIME;
-      if (k < 0) {
-        put(m, f.from, 0, 0);
+      if (k <= 0) {
+        put(m, f.origin, 0, 0);
         continue;
       }
-      stackSlot(f.to, displayCount(f.to), target);
+      stackSlot(f.to, Math.min(PILE_MAX - 1, displayCount(f.to)), target);
       const s = k * k * (3 - 2 * k);
-      p.lerpVectors(f.from, target, s);
-      p.y += Math.sin(k * Math.PI) * (0.32 + f.from.distanceTo(target) * 0.12);
+      p.lerpVectors(f.origin, target, s);
+      p.y += Math.sin(k * Math.PI) * (0.32 + f.origin.distanceTo(target) * 0.12);
       put(m, p, f.spin * k, f.spin * k * 0.3);
     }
     m.count = used;

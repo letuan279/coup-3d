@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameEvent, GameEventType, GameView, PhaseView } from '@shared/types';
 import { translate } from '../../i18n';
 import type { Lang } from '../../store/useGame';
-import { describePhase, joinNames, pendingDeciders } from '../game/phaseText';
+import { blockDuringActionWindow, describeBlockedAction, describePhase, joinNames, pendingDeciders } from '../game/phaseText';
 import { describeEvent } from './describe';
 import { formatSegs, segsToText } from './rich';
 
@@ -166,6 +166,48 @@ describe('phase text', () => {
       }
     });
   }
+
+  describe('block pending while others may still challenge the action (SPEC §1.1)', () => {
+    // Heo (b) steals from Gấu (d); Gấu blocked with Ambassador; Cáo (a) and Mèo (c) may still
+    // challenge Heo's Captain claim.
+    const p4 = [...pp, { id: 'd', name: 'Gấu', seat: 3, coins: 3, influences: [], hiddenCount: 2, eliminated: false }];
+    const stealD = { type: 'steal' as const, actorId: 'b', targetId: 'd', claim: 'captain' as const };
+    const blockD = { blockerId: 'd', character: 'ambassador' as const };
+    const windowPhase: PhaseView = {
+      kind: 'action_response',
+      action: stealD,
+      responders: ['a', 'c', 'd'],
+      passed: ['d'],
+      canChallenge: true,
+      blockers: ['d'],
+      blockCharacters: ['captain', 'ambassador'],
+    };
+    const g = (): GameView => ({ ...view(windowPhase), players: p4, pendingAction: stealD, pendingBlock: blockD });
+    const text = (self: string | null, lang: Lang = 'vi') => segsToText(describePhase(g(), self, tFor(lang)).segs);
+
+    it('bystanders see the action and the block', () => {
+      expect(text('a')).toBe('Heo tuyên bố Thuyền trưởng để Cướp xu của Gấu — Gấu đã chặn bằng Đại sứ');
+      expect(text(null, 'en')).toBe('Heo claims Captain to Steal from Gấu — Gấu blocked with Ambassador');
+      expect(segsToText(describeBlockedAction(g(), blockD, 'a', tFor('vi')))).toBe(
+        'Heo tuyên bố Thuyền trưởng để Cướp xu của Gấu — Gấu đã chặn bằng Đại sứ',
+      );
+    });
+
+    it('the blocker is told they are waiting for challenges to the action', () => {
+      expect(text('d')).toBe('Bạn đã chặn bằng Đại sứ — chờ người khác quyết định có thách thức Heo không');
+      expect(describePhase(g(), 'd', tFor('vi')).mine).toBe(true);
+    });
+
+    it('the actor sees the block and that others may still challenge', () => {
+      expect(text('b')).toBe('Gấu đã chặn Cướp của bạn bằng Đại sứ — những người khác vẫn có thể thách thức bạn');
+    });
+
+    it('only the remaining responders are pending', () => {
+      expect(pendingDeciders(windowPhase)).toEqual(['a', 'c']);
+      expect(blockDuringActionWindow(g())).toEqual(blockD);
+      expect(blockDuringActionWindow({ ...g(), pendingBlock: null })).toBeNull();
+    });
+  });
 
   it('lists pending deciders', () => {
     expect(pendingDeciders(phases[0])).toEqual(['a']);

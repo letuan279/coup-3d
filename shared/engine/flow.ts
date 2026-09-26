@@ -8,6 +8,8 @@
  *   the meantime has no effect but still logs `action_resolved`.
  * - `action_failed` / `action_blocked` are logged as soon as the outcome is known, before the
  *   influence loss that goes with it.
+ * - `block` is logged when the block is declared, even when the action_response window stays
+ *   open for the other players to challenge the action's claim first (SPEC §1.1).
  */
 import { ACTION_GAIN, ACTIONS, EXCHANGE_DRAW } from '../constants';
 import type {
@@ -158,10 +160,23 @@ function costReason(type: ActionType): CoinReason {
   return type === 'coup' ? 'coup' : 'assassinate';
 }
 
-/** The actor proved their claim: give the target its block window, or resolve. */
+/**
+ * The actor proved their claim: a block declared while the window was still open goes straight
+ * to its block_response (the target already chose; no second block window). Otherwise the
+ * target gets its block window (even if it had passed before the challenge), or the action resolves.
+ */
 function afterActionProven(s: GameState): void {
   const action = pendingAction(s);
   const def = ACTIONS[action.type];
+  if (s.pendingBlock) {
+    if (isAlive(s, s.pendingBlock.blockerId) && isAlive(s, action.actorId)) {
+      openBlockResponse(s);
+      return;
+    }
+    // Not reachable with the current rules (nothing can eliminate the blocker or the proven
+    // actor here) — the block is moot, fall through.
+    s.pendingBlock = null;
+  }
   if (def.blockableBy === 'target' && isAlive(s, action.targetId) && isAlive(s, action.actorId)) {
     const targetId = action.targetId as string;
     setPhase(s, {
@@ -224,20 +239,45 @@ export function passResponse(s: GameState, playerId: string): void {
   }
   phase.passed.push(playerId);
   emit(s, { type: 'pass', playerId });
-  if (!phase.responders.every((id) => phase.passed.includes(id))) return;
+  if (!allResponded(phase)) return;
   if (phase.kind === 'action_response') {
-    resolveAction(s);
+    // Nobody challenged the action: a block declared while the window was open now gets its
+    // own challenge window; otherwise the action takes effect.
+    if (s.pendingBlock) openBlockResponse(s);
+    else resolveAction(s);
   } else {
     logBlocked(s);
     endTurn(s);
   }
 }
 
+function allResponded(phase: { responders: string[]; passed: string[] }): boolean {
+  return phase.responders.every((id) => phase.passed.includes(id));
+}
+
+/**
+ * Record the block (logged now). For a challengeable action (steal / assassinate) whose other
+ * responders have not all answered yet, the SAME action_response window stays open — same
+ * phaseSeq, same deadline — so they can still challenge the action's claim or pass; the blocker
+ * counts as responded. Otherwise (foreign aid, nobody left to answer) → block_response now.
+ */
 export function declareBlock(s: GameState, blockerId: string, character: Character): void {
   const action = pendingAction(s);
   s.pendingBlock = { blockerId, character };
   emit(s, { type: 'block', blockerId, character, actorId: action.actorId, action: action.type });
-  setPhase(s, { kind: 'block_response', responders: othersInTurnOrder(s, blockerId), passed: [] });
+  const phase = s.phase;
+  if (phase.kind === 'action_response' && phase.canChallenge) {
+    phase.passed.push(blockerId);
+    if (!allResponded(phase)) return;
+  }
+  openBlockResponse(s);
+}
+
+/** Everyone alive except the blocker may challenge the pending block. */
+function openBlockResponse(s: GameState): void {
+  const block = s.pendingBlock;
+  if (!block) throw new Error('engine: no pending block');
+  setPhase(s, { kind: 'block_response', responders: othersInTurnOrder(s, block.blockerId), passed: [] });
 }
 
 function logBlocked(s: GameState): void {
@@ -262,6 +302,7 @@ function replaceProvenCard(s: GameState, playerId: string, slot: number): void {
   const proven = player.influences[slot].card;
   s.deck.push(proven);
   shuffleDeck(s);
+  forgetDeckKnowledge(s);
   const fresh = s.deck.shift() as Card;
   player.influences[slot] = { card: fresh, revealed: false };
   emit(s, { type: 'card_replaced', playerId, slot, character: proven.character });
@@ -281,6 +322,8 @@ export function challengeAction(s: GameState, challengerId: string): void {
     return;
   }
   emit(s, { type: 'challenge_result', challengerId, challengedId, character, challengedHadCard: false });
+  // The action fails; a block declared while the window was open is moot (never action_blocked).
+  s.pendingBlock = null;
   const cost = ACTIONS[action.type].cost;
   if (cost > 0) transferCoins(s, 'treasury', challengedId, cost, 'refund');
   emit(s, { type: 'action_failed', actorId: challengedId, action: action.type });
@@ -306,7 +349,16 @@ export function challengeBlock(s: GameState, challengerId: string): void {
 
 // ───────────── Exchange ─────────────
 
+/**
+ * Private deck knowledge (GameState.knownInDeck): what a player returned with their Exchange is
+ * provably still in the court deck only until the next draw from it, by anyone.
+ */
+function forgetDeckKnowledge(s: GameState): void {
+  s.knownInDeck = {};
+}
+
 function beginExchange(s: GameState, actorId: string): void {
+  forgetDeckKnowledge(s);
   const drawn = s.deck.splice(0, Math.min(EXCHANGE_DRAW, s.deck.length));
   setPhase(s, { kind: 'exchange', drawn });
   emit(s, { type: 'exchange_draw', playerId: actorId, count: drawn.length });
@@ -335,6 +387,8 @@ export function completeExchange(s: GameState, keep: readonly number[]): void {
   const returned = cards.filter((_, i) => !kept.has(i));
   s.deck.push(...returned);
   shuffleDeck(s);
+  // Nobody has drawn since this exchange's own draw cleared the knowledge.
+  s.knownInDeck = { [actor.id]: returned.map((c) => c.character) };
   emit(s, { type: 'exchange_done', playerId: actor.id, returned: returned.length });
   endTurn(s);
 }

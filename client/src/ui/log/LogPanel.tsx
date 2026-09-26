@@ -5,6 +5,7 @@ import { useGame, type Lang } from '../../store/useGame';
 import { Icon } from '../common/Icon';
 import { RichText } from '../common/RichText';
 import { useSelfId } from '../hooks';
+import { collapseLog } from './collapse';
 import { describeEvent, type NamedPlayer } from './describe';
 
 /** Right-side collapsible game log (≤320px) with localized sentences. */
@@ -33,6 +34,7 @@ export const LogPanel = memo(function LogPanel() {
     [namesKey],
   );
 
+  const lines = useMemo(() => (log ? collapseLog(log) : []), [log]);
   const lastSeq = log && log.length ? log[log.length - 1].seq : 0;
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -66,10 +68,10 @@ export const LogPanel = memo(function LogPanel() {
           stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
       >
-        {!log || log.length === 0 ? (
+        {lines.length === 0 ? (
           <p className="log-empty">{t('log.empty')}</p>
         ) : (
-          log.map((e) => <LogLine key={e.seq} e={e} players={named} lang={lang} selfId={selfId} />)
+          lines.map((e) => <LogLine key={e.seq} e={e} players={named} lang={lang} selfId={selfId} />)
         )}
       </div>
     </aside>

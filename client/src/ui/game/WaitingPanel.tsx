@@ -5,9 +5,13 @@ import { useGame } from '../../store/useGame';
 import { Avatar } from '../common/Avatar';
 import { Icon } from '../common/Icon';
 import { useMe, useSelfId } from '../hooks';
-import { joinNames, pendingDeciders } from './phaseText';
+import { blockDuringActionWindow, joinNames, pendingDeciders } from './phaseText';
 
-function waitKey(g: GameView): string {
+function waitKey(g: GameView, selfId: string | null): string {
+  if (blockDuringActionWindow(g)) {
+    // A block is on the table; the remaining responders decide whether to challenge the action.
+    return g.phase.kind === 'action_response' && g.phase.action.actorId === selfId ? 'wait.challengeYou' : 'wait.challengeAction';
+  }
   switch (g.phase.kind) {
     case 'turn':
       return 'wait.forAction';
@@ -65,7 +69,13 @@ export const WaitingPanel = memo(function WaitingPanel() {
   const deciders = pendingDeciders(game.phase).filter((id) => id !== selfId);
   const names = deciders.map((id) => game.players.find((p) => p.id === id)?.name ?? '???');
   const ph = game.phase;
-  const passed = (ph.kind === 'action_response' || ph.kind === 'block_response') && !!selfId && ph.passed.includes(selfId);
+  const block = blockDuringActionWindow(game);
+  // The blocker is recorded among the "responded" players, but they blocked — they did not allow it.
+  const blocked = !!block && block.blockerId === selfId;
+  const passed =
+    !blocked && (ph.kind === 'action_response' || ph.kind === 'block_response') && !!selfId && ph.passed.includes(selfId);
+  const actorId = ph.kind === 'action_response' ? ph.action.actorId : '';
+  const actorName = game.players.find((p) => p.id === actorId)?.name ?? '???';
 
   return (
     <div className="waiting-panel">
@@ -78,8 +88,9 @@ export const WaitingPanel = memo(function WaitingPanel() {
       </div>
       <div>
         {passed && <span className="tag tag--teal">{t('wait.passed')}</span>}
+        {blocked && <span className="tag tag--violet">{t('wait.blocked')}</span>}
         <div className="waiting-panel__title">
-          {t(waitKey(game), { name: names[0] ?? '', names: joinNames(names, t) })}
+          {t(waitKey(game, selfId), { name: names[0] ?? '', names: joinNames(names, t), actor: actorName })}
           <span className="dots" aria-hidden="true">
             <i />
             <i />
