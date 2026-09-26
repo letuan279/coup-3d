@@ -4,11 +4,12 @@
  * is only ever sent to that seat's own client (RoomView.rejoinKey).
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { REJOIN_KEY_LENGTH } from '@shared/constants';
 
 /** 12 random bytes = 96 bits of entropy (SPEC requires ≥ 64). */
 const REJOIN_KEY_BYTES = 12;
-/** base64url length of REJOIN_KEY_BYTES (no padding). */
-export const REJOIN_KEY_LENGTH = 16;
+/** base64url length of REJOIN_KEY_BYTES (no padding) — shared with the client's link parser. */
+export { REJOIN_KEY_LENGTH };
 
 export function newRejoinKey(): string {
   return randomBytes(REJOIN_KEY_BYTES).toString('base64url');

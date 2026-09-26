@@ -123,6 +123,13 @@ function startingCoins(log: readonly LoggedEvent[], players: Map<string, PlayerI
   return coins;
 }
 
+/** Players whose challenge chances one block added to (see applyLog). */
+interface BlockBumps {
+  chances: PlayerIntel[];
+  hot: PlayerIntel[];
+  contessa: PlayerIntel[];
+}
+
 /** Actions a player with a Duke and under 7 coins would rarely pick over Tax. */
 const TAX_ALTERNATIVES: ReadonlySet<ActionType> = new Set(['income', 'foreign_aid', 'steal', 'exchange']);
 
@@ -145,6 +152,14 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
   let blockHot = new Set<string>();
   /** The player whose action the latest block stopped. */
   let lastBlockActor = '';
+  /**
+   * What the latest block of the pending action added to the others' chances. A block declared
+   * while the action's own window is still open is moot if a challenge then catches the actor
+   * (the action fails, the block window never opens): those chances are taken back.
+   */
+  let blockBumps: BlockBumps | null = null;
+  /** An action challenge after a block is being resolved (its result decides whether the block was moot). */
+  let mootPending = false;
   const coins = startingCoins(log, players);
   const coinsOf = (id: string | undefined): number => (id === undefined ? 0 : (coins.get(id) ?? 0));
   const others = (id: string): PlayerIntel[] => {
@@ -158,6 +173,8 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
       case 'action': {
         stealTargetCoins = ev.action === 'steal' ? coinsOf(ev.targetId) : 0;
         blockedThis.clear();
+        blockBumps = null;
+        mootPending = false;
         const actor = players.get(ev.actorId);
         if (actor) {
           actor.lastActionTurn[ev.action] = ev.turn;
@@ -186,14 +203,21 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
         blockedThis.add(ev.blockerId);
         blockHot = new Set();
         lastBlockActor = ev.actorId;
+        const bumps: BlockBumps = { chances: [], hot: [], contessa: [] };
         for (const o of others(ev.blockerId)) {
           o.challengeChances++;
-          if (ev.character === 'contessa' && ev.actorId === o.id) o.contessaChallengeChances++;
+          bumps.chances.push(o);
+          if (ev.character === 'contessa' && ev.actorId === o.id) {
+            o.contessaChallengeChances++;
+            bumps.contessa.push(o);
+          }
           if (alive.size <= 2 || ev.actorId === o.id) {
             o.hotChances++;
             blockHot.add(o.id);
+            bumps.hot.push(o);
           }
         }
+        blockBumps = bumps;
         break;
       }
       case 'challenge': {
@@ -203,11 +227,22 @@ function applyLog(log: readonly LoggedEvent[], players: Map<string, PlayerIntel>
           if ((ev.against === 'block' ? blockHot : actionHot).has(c.id)) c.hotChallenges++;
           if (ev.against === 'block' && ev.character === 'contessa' && lastBlockActor === c.id) c.contessaChallenges++;
         }
+        // After a block, an action challenge can only come from the still-open action window.
+        mootPending = ev.against === 'action' && blockBumps !== null;
         break;
       }
       case 'challenge_result': {
         const challenged = players.get(ev.challengedId);
         const challenger = players.get(ev.challengerId);
+        if (mootPending && !ev.challengedHadCard && blockBumps) {
+          // The actor was caught: the block is moot and nobody ever got to challenge it. (The
+          // blocker's claim was still made in public, so it stays on record.)
+          for (const o of blockBumps.chances) o.challengeChances--;
+          for (const o of blockBumps.hot) o.hotChances--;
+          for (const o of blockBumps.contessa) o.contessaChallengeChances--;
+          blockBumps = null;
+        }
+        mootPending = false;
         if (ev.challengedHadCard) {
           if (challenged) challenged.provenClaims++;
           if (challenger) challenger.wrongChallenges++;
@@ -434,20 +469,24 @@ const BLOCK_CLAIM_LR: Record<Character, readonly [number, number]> = {
   contessa: [3, 6],
 };
 
-/** Full-history readers (hard) know how rarely a player on their last card dares to bluff. */
+/**
+ * Full-history readers (hard) know how rarely a player on their last card dares to bluff —
+ * unless that player's record shows it bluffs anyway (see bluffEvidence).
+ */
 const LAST_CARD_SHARPNESS = 1.8;
 
 /**
- * Likelihood ratio of the claim currently being made. A forced claim (nothing to lose) says
- * almost nothing, and neither does a desperate one (one card left, trying to stop a rival who
- * is about to coup).
+ * Likelihood ratio of the claim currently being made by `p`. A forced claim (nothing to lose)
+ * says almost nothing, and neither does a desperate one (one card left, trying to stop a rival
+ * who is about to coup).
  */
-function currentClaimLr(c: Character, hidden: number, q: HoldQuery, depth: BeliefDepth): number {
+function currentClaimLr(c: Character, p: PlayerIntel, q: HoldQuery, depth: BeliefDepth): number {
   if (q.forced) return 1.2;
   if (q.desperate) return 2.5;
   const [many, one] = (q.via === 'block' ? BLOCK_CLAIM_LR : ACTION_CLAIM_LR)[c];
-  if (hidden > 1) return many;
-  return depth.history ? one * LAST_CARD_SHARPNESS : one;
+  if (p.hidden > 1) return many;
+  if (!depth.history) return one;
+  return one * (1 + (LAST_CARD_SHARPNESS - 1) * (1 - bluffEvidence(p)));
 }
 /** Odds multiplier on holding a Duke for a player who declined Tax with the current hand. */
 const DECLINED_TAX_DUKE = 0.4;
@@ -510,7 +549,7 @@ export function posteriorFromPrior(
   const past = depth.claims ? pastClaims(p, q.claimSeq) : [];
   const same = past.reduce((n, r) => n + (r.character === c ? 1 : 0), 0);
 
-  let lr = q.claiming ? currentClaimLr(c, p.hidden, q, depth) : 1;
+  let lr = q.claiming ? currentClaimLr(c, p, q, depth) : 1;
   if (same > 0) lr *= FIRST_PAST_CLAIM_LR * REPEAT_CLAIM_LR ** Math.min(same - 1, 4);
   if (depth.history && lr > 1) lr = 1 + (lr - 1) * honestyFactor(p);
   odds *= lr;
@@ -589,6 +628,21 @@ export function blockHabit(p: PlayerIntel): number {
   for (const k of kinds) odds /= TYPICAL_BLOCK[k] ?? 1;
   odds *= 1.15 ** Math.min(4, p.blocks.length - kinds.size);
   return odds / (1 + odds);
+}
+
+/** Evidence weight of claiming more characters than one holds (some claims are bluffs, but which?). */
+const INCONSISTENT_EVIDENCE = 0.5;
+
+/**
+ * 0..1: how strongly `p`'s public record says it bluffs habitually — bluffs caught (against
+ * claims proven), a habit of blocking everything, or more characters claimed than cards held.
+ * An honest player never builds any of it.
+ */
+export function bluffEvidence(p: PlayerIntel): number {
+  const caught = p.caughtBluffs / (p.caughtBluffs + p.provenClaims + 1);
+  const distinct = new Set(p.claims.map((r) => r.character)).size;
+  const inconsistent = p.hidden > 0 && distinct > p.hidden ? INCONSISTENT_EVIDENCE : 0;
+  return 1 - (1 - caught) * (1 - blockHabit(p)) * (1 - inconsistent);
 }
 
 /** Blocks of `action` that `p` made within the last `turns` turns. */

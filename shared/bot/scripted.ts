@@ -1,6 +1,7 @@
 /**
  * Scripted "exploit" opponents for the simulator: fixed, simple strategies a human could adopt
- * against the bots (always lie, always call Contessa, always block steals, never challenge…).
+ * against the bots (always lie, always call Contessa, always block steals, never challenge,
+ * always challenge…).
  * They see exactly their own GameView, like any player. Used by `simulation.ts` to check that no
  * trivial script beats a harder level more easily than an easier one.
  *
@@ -10,9 +11,24 @@ import { ACTIONS } from '../constants';
 import type { ActionOption, ActionType, Character, GameView, Move, Prompt } from '../types';
 import { buildKnowledge } from './knowledge';
 
-export type ScriptId = 'liar' | 'contessaCaller' | 'stealBlocker' | 'honest' | 'dukeTellCaller';
+export type ScriptId =
+  | 'liar'
+  | 'contessaCaller'
+  | 'stealBlocker'
+  | 'honest'
+  | 'dukeTellCaller'
+  | 'alwaysChallenge'
+  | 'challengeWhenHit';
 
-export const SCRIPT_IDS: readonly ScriptId[] = ['liar', 'contessaCaller', 'stealBlocker', 'honest', 'dukeTellCaller'];
+export const SCRIPT_IDS: readonly ScriptId[] = [
+  'liar',
+  'contessaCaller',
+  'stealBlocker',
+  'honest',
+  'dukeTellCaller',
+  'alwaysChallenge',
+  'challengeWhenHit',
+];
 
 export const SCRIPT_INFO: Readonly<Record<ScriptId, string>> = {
   liar: 'always Tax (Duke or not), block everything with the first blocker, never challenge',
@@ -20,6 +36,8 @@ export const SCRIPT_INFO: Readonly<Record<ScriptId, string>> = {
   stealBlocker: 'honest, but blocks every steal (Captain bluff when it has no blocker)',
   honest: 'uses only real cards, blocks only with real cards, never challenges',
   dukeTellCaller: 'honest, but challenges Duke claims by players who declined Tax since their last hand change',
+  alwaysChallenge: 'honest turns, but challenges every claim it can (every action claim and every block)',
+  challengeWhenHit: 'honest turns, but challenges every claim that hits it (aimed at it, blocking it; heads-up: all)',
 };
 
 export type Script = (view: GameView, rand: () => number) => Move;
@@ -169,12 +187,35 @@ const dukeTellCaller: Script = script(honestAction, (view, prompt) => {
   return intel?.declinedTax ? { type: 'challenge' } : null;
 });
 
+/** Whether the prompt lets the player challenge the pending claim. */
+function canChallenge(prompt: Prompt): boolean {
+  return (prompt.kind === 'respond_action' && prompt.canChallenge) || prompt.kind === 'respond_block';
+}
+
+const alwaysChallenge: Script = script(honestAction, (_view, prompt) =>
+  canChallenge(prompt) ? { type: 'challenge' } : null,
+);
+
+/** The pending claim hits the viewer directly: aimed at it, blocking its action, or heads-up. */
+function hitsMe(view: GameView, prompt: Prompt): boolean {
+  const act = view.pendingAction;
+  if (!act) return false;
+  if (view.players.filter((p) => !p.eliminated).length <= 2) return true;
+  return prompt.kind === 'respond_block' ? act.actorId === view.viewerId : act.targetId === view.viewerId;
+}
+
+const challengeWhenHit: Script = script(honestAction, (view, prompt) =>
+  canChallenge(prompt) && hitsMe(view, prompt) ? { type: 'challenge' } : null,
+);
+
 export const SCRIPTS: Readonly<Record<ScriptId, Script>> = {
   liar,
   contessaCaller,
   stealBlocker,
   honest,
   dukeTellCaller,
+  alwaysChallenge,
+  challengeWhenHit,
 };
 
 export function isScriptId(x: string): x is ScriptId {

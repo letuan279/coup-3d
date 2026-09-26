@@ -36,8 +36,13 @@ export interface LevelTuning {
   catchImpossibleRate: number;
   /** Extra value a challenge must beat passing by. */
   challengeMargin: number;
-  /** The margin for challenging an action claim heads-up (the gain is not shared with anyone). */
+  /** The margin for challenging an action claim heads-up (the gain is not shared with anyone)… */
   duelChallengeMargin: number;
+  /**
+   * …lowered towards this one as the actor's record shows habitual bluffing (see bluffEvidence):
+   * a bold margin for everyone over-challenges honest players, a cautious one lets a liar run.
+   */
+  duelBlufferMargin: number;
   /**
    * The margin when the bot is the actor whose action was blocked: nobody else is likely to call
    * a block on the bot's behalf, so a player who bluff-blocks every steal must not get a pass.
@@ -72,6 +77,7 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     catchImpossibleRate: 0.8,
     challengeMargin: 0.45,
     duelChallengeMargin: 0.45,
+    duelBlufferMargin: 0.45,
     blockedActorMargin: 0.45,
     bluffScale: 0.5,
     targetRandomness: 0.5,
@@ -89,6 +95,7 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     catchImpossibleRate: 1,
     challengeMargin: 0.04,
     duelChallengeMargin: 0.04,
+    duelBlufferMargin: 0.04,
     blockedActorMargin: 0.04,
     bluffScale: 1.55,
     targetRandomness: 0.1,
@@ -105,7 +112,8 @@ export const LEVEL_TUNING: Readonly<Record<BotLevel, Readonly<LevelTuning>>> = {
     evNoise: 0.04,
     catchImpossibleRate: 1,
     challengeMargin: 0.25,
-    duelChallengeMargin: 0.15,
+    duelChallengeMargin: 0.25,
+    duelBlufferMargin: 0.1,
     blockedActorMargin: 0.08,
     bluffScale: 1.6,
     targetRandomness: 0,

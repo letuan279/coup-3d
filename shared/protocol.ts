@@ -45,12 +45,14 @@ export interface HandshakeAuth {
 export interface ClientToServerEvents {
   'room:create': (p: { name: string; avatar?: AvatarId }, ack: Ack<{ code: string }>) => void;
   /**
-   * Join by code. While a game is running (or finished, before the host returns to the lobby)
-   * joining is only possible to reclaim your own human seat with its `rejoinKey` (from
-   * RoomView.rejoinKey — proof of ownership); otherwise `game_in_progress`. A wrong key →
-   * `bad_rejoin_key`. With a valid key the seat is taken over by this socket (any other socket
-   * holding it gets room:closed 'replaced'); a seat that had been left becomes human-controlled
-   * again. `name` is ignored when reclaiming. In the lobby a rejoinKey is ignored.
+   * Join by code. A valid `rejoinKey` (from RoomView.rejoinKey — proof of ownership) reclaims
+   * your own human seat in any room state, lobby included: the seat is taken over by this socket
+   * (any other socket holding it gets room:closed 'replaced'), a seat that had been left becomes
+   * human-controlled again, and `name`/`avatar` are ignored. While a game is running (or finished,
+   * before the host returns to the lobby) that is the only way in: no key → `game_in_progress`,
+   * wrong key → `bad_rejoin_key`. In the lobby a key that matches no seat falls back to a normal
+   * join when a `name` is given, else `bad_rejoin_key`. If the socket is seated in another room,
+   * it leaves that room only once this join has been accepted (a refused join keeps it there).
    */
   'room:join': (
     p: { code: string; name: string; avatar?: AvatarId; rejoinKey?: string },

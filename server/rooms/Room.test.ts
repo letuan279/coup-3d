@@ -543,18 +543,55 @@ describe('Room — game loop', () => {
     }
   });
 
-  it('ignores the key in the lobby (normal join, name required)', () => {
-    const { room, join } = setup();
+  it('a valid key reclaims the seat in the lobby too (no duplicate "Bob 2"); the old socket is told "replaced"', () => {
+    const { room, join, released } = setup();
     const host = join('Host');
     const b = join('Bob');
     const bKey = keyOf(b);
-    const res = room.join('token-bob-other', new FakeConnection(), { name: 'Bob', rejoinKey: bKey });
-    expect(res.ok && res.playerId).not.toBe(b.id);
-    expect(room.view(host.id).players.map((p) => p.name)).toEqual(['Host', 'Bob', 'Bob 2']);
-    expect(room.join('token-nameless', new FakeConnection(), { rejoinKey: bKey })).toEqual({
-      ok: false,
-      error: 'bad_request',
-    });
+    const phone = new FakeConnection('bob-phone');
+    expect(room.join('token-bob-other', phone, { name: 'Whatever', rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+    expect(room.view(host.id).players.map((p) => p.name)).toEqual(['Host', 'Bob']);
+    expect(b.conn.closedReasons).toEqual(['replaced']);
+    expect(released).toContain(b.token);
+    expect(room.playerIdForToken('token-bob-other')).toBe(b.id);
+    // Like any attach with no game running: game:cleared first, then the room with the same key.
+    expect(phone.sent.map((e) => e.event)).toEqual(['game:cleared', 'room:state']);
+    expect(phone.lastRoom).toMatchObject({ youId: b.id, status: 'lobby', rejoinKey: bKey });
+    // Without a name the key alone is enough.
+    expect(room.join('token-bob-third', new FakeConnection(), { rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+  });
+
+  it('lobby: the owner of a disconnected seat gets it back (no ghost dealt in), even in a full room', () => {
+    const { room, join, clock } = setup();
+    const host = join('Host');
+    const b = join('Bob');
+    const bKey = keyOf(b);
+    for (let i = 0; i < 4; i++) room.addBot(host.id, 'easy');
+    expect(room.playerCount).toBe(6);
+    room.detach(b.id, b.conn);
+    const phone = new FakeConnection('bob-phone');
+    expect(room.join('token-bob-phone', phone, { name: 'Bob', rejoinKey: bKey })).toEqual({ ok: true, playerId: b.id });
+    expect(room.playerCount).toBe(6);
+    // The lobby-removal timer of the offline seat was cancelled.
+    clock.advance(T.lobbyDisconnectRemoveMs * 2);
+    expect(player(room, b.id)).toMatchObject({ name: 'Bob', connected: true });
+    expect(room.start(host.id)).toEqual({ ok: true });
+    expect(game(room).players.filter((p) => p.id === b.id)).toHaveLength(1);
+    expect(room.view(host.id).players.find((p) => p.id === b.id)).toMatchObject({ connected: true, botControlled: false });
+  });
+
+  it('lobby: a key that matches no seat is a normal join only when a name comes with it', () => {
+    const { room, join } = setup();
+    const host = join('Host');
+    const stale = 'A'.repeat(16);
+    const res = room.join('token-new-guest', new FakeConnection(), { name: 'Bob', rejoinKey: stale });
+    expect(res.ok).toBe(true);
+    expect(room.view(host.id).players.map((p) => p.name)).toEqual(['Host', 'Bob']);
+    const nameless = new FakeConnection('nameless');
+    expect(room.join('token-nameless', nameless, { rejoinKey: stale })).toEqual({ ok: false, error: 'bad_rejoin_key' });
+    expect(nameless.sent).toEqual([]);
+    // No key, no name: still a malformed lobby join.
+    expect(room.join('token-nameless', nameless, {})).toEqual({ ok: false, error: 'bad_request' });
   });
 
   it('reclaims a seat that was left after the game ended; backToLobby keeps it', () => {

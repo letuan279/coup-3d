@@ -1,11 +1,13 @@
 /**
- * Resting poses of the influence cards on the felt (pure math — no React, no WebGL — so the
- * projection tests can check what the first-person camera actually sees).
+ * Resting poses of the influence cards on the felt, and the per-frame easing towards them
+ * (pure math — no React, no WebGL — so the tests can check what the first-person camera
+ * actually sees and that no animation dips a card through the felt).
  *
  * Card hierarchy in Cards.tsx: outer group (position = bottom-edge centre, rotation.y = yaw)
  * → flipper (rotation.z: 0 face up, π face down) → inner (rotation.x = -π/2 + prop) → a plane
  * whose origin is on its bottom edge. prop 0 = lying flat, top pointing along the yaw.
  */
+import { damp, dampAngle } from 'maath/easing';
 import { CARD_H, CARD_RADIUS, LOCAL_CARD_RADIUS, TABLE, VIEW_Z, type SeatFrame } from '../layout';
 
 export interface CardPoseSpec {
@@ -91,4 +93,43 @@ export function homePose(spec: CardPoseSpec, f: SeatFrame, out: Pose): Pose {
   out.yaw = Math.atan2(-out.x, VIEW_Z - out.z) - SHOWN_FAN * screenSide;
   out.prop = SHOWN_PROP;
   return out;
+}
+
+/** Hop of a flipping card at the vertical point of its turn: clears a flat card's corners. */
+const FLIP_HOP = 0.16;
+
+/**
+ * Stand-up (prop) a card may take at flipper angle `flip`: none until it has turned face up
+ * past vertical. Standing it up while it is still face down would swing its top edge down
+ * through the felt as the flip turns it over (SCN-4: revealed opponent cards stand up).
+ */
+export function propWhileFlipping(flip: number, prop: number): number {
+  return Math.abs(flip) < Math.PI / 2 ? prop : 0;
+}
+
+/**
+ * Lift of a turning card above its resting height: the hop, plus how far a card still propped
+ * `prop` would sink its top edge below the pivot while past vertical (turning back face down
+ * before it has settled flat — e.g. a resync straight into a new game).
+ */
+export function flipLift(flip: number, prop: number): number {
+  return Math.abs(Math.sin(flip)) * FLIP_HOP + Math.max(0, -CARD_H * Math.sin(prop) * Math.cos(flip));
+}
+
+type Xyz = { x: number; y: number; z: number };
+/** The animated parts of a card in Cards.tsx (three's Vector3 / Euler fit). */
+export type CardRig = {
+  outer: { position: Xyz; rotation: Xyz };
+  flipper: { rotation: Xyz };
+  inner: { rotation: Xyz };
+};
+
+/** One frame of a card easing towards its resting pose `home`: slide, turn, flip, stand up, hop. */
+export function settleCard({ outer, flipper, inner }: CardRig, home: Pose, faceUp: boolean, dt: number): void {
+  damp(outer.position, 'x', home.x, 0.22, dt);
+  damp(outer.position, 'z', home.z, 0.22, dt);
+  dampAngle(outer.rotation, 'y', home.yaw, 0.3, dt);
+  damp(flipper.rotation, 'z', faceUp ? 0 : Math.PI, 0.22, dt);
+  damp(inner.rotation, 'x', -Math.PI / 2 + propWhileFlipping(flipper.rotation.z, home.prop), 0.25, dt);
+  outer.position.y = home.y + flipLift(flipper.rotation.z, inner.rotation.x + Math.PI / 2);
 }

@@ -4,14 +4,14 @@
  * label sync in `labels/labelSync.ts`, both driven from this component's useFrame.
  */
 import { memo, useMemo, useRef } from 'react';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { BoxGeometry, PlaneGeometry, type Group, type Mesh, type PerspectiveCamera, type Sprite } from 'three';
 import type { SceneMode, SeatModel } from '../sceneModel';
-import { CARD_RADIUS, HEAD_Y, SEAT_RADIUS, TABLE, frameAt } from '../layout';
+import { CARD_RADIUS, HEAD_Y, HIT_BOX_CENTER, HIT_BOX_SIZE, SEAT_RADIUS, TABLE, frameAt } from '../layout';
 import { animalParts, antennaGeometry, mouthGeometries, RIG } from './animalGeometry';
 import { ghostMat, hitMat, hoverHullMat, hoverRingMat, targetHullMat, targetRingMat, toonMat } from '../materials';
-import { chooseTarget, hoverEnter, hoverLeave, useHovered, useTargetable } from '../interaction';
+import { chooseTarget, hoverEnter, hoverLeave, seatPointerHandlers, useHovered, useTargetable } from '../interaction';
 import { Nameplate } from '../labels/Nameplate';
 import { createLabelMemory, syncLabel, type LabelRefs } from '../labels/labelSync';
 import { useDeferredMount } from '../useDeferredMount';
@@ -29,7 +29,7 @@ export interface CharacterProps {
   showPlate: boolean;
 }
 
-const hitGeo = new BoxGeometry(0.9, 1.5, 0.9);
+const hitGeo = new BoxGeometry(...HIT_BOX_SIZE);
 const ringGeo = new PlaneGeometry(0.95, 0.95);
 /** Target ring sits around the player's cards (seat-local z). */
 const RING_Z = SEAT_RADIUS - CARD_RADIUS;
@@ -81,19 +81,7 @@ export const Character = memo(function Character(props: CharacterProps) {
   });
 
   const interactive = mode === 'game';
-  const onOver = interactive
-    ? (e: ThreeEvent<PointerEvent>) => {
-        e.stopPropagation();
-        hoverEnter(id);
-      }
-    : undefined;
-  const onOut = interactive ? () => hoverLeave(id) : undefined;
-  const onClick = interactive
-    ? (e: ThreeEvent<MouseEvent>) => {
-        e.stopPropagation();
-        chooseTarget(id);
-      }
-    : undefined;
+  const handlers = useMemo(() => (interactive ? seatPointerHandlers(id) : {}), [interactive, id]);
 
   const highlight = interactive && (targetable || hovered);
   const hullMat = targetable ? targetHullMat() : hoverHullMat();
@@ -145,7 +133,7 @@ export const Character = memo(function Character(props: CharacterProps) {
           renderOrder={3}
         />
       )}
-      <mesh geometry={hitGeo} material={hitMat()} position={[0, 1.1, 0.05]} onPointerOver={onOver} onPointerOut={onOut} onClick={onClick} />
+      <mesh geometry={hitGeo} material={hitMat()} position={HIT_BOX_CENTER} {...handlers} />
       {showPlate && labelsReady && (
         <Html position={[0, HEAD_Y, 0]} zIndexRange={[40, 10]} wrapperClass="sc-html">
           <Nameplate

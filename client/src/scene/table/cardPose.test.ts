@@ -1,12 +1,13 @@
 /**
  * What the first-person camera sees of the cards on the felt (regression for perf3d-4:
- * revealed opponent cards used to lie flat and project 11–19 px tall at 1366×768).
+ * revealed opponent cards used to lie flat and project 11–19 px tall at 1366×768), and how
+ * they get there (SCN-4: the reveal flip must not dip a standing card through the felt).
  */
 import { describe, expect, it } from 'vitest';
-import { Euler, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { Euler, Group, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { fitFraming, gameInsets, seatFramePoints, seatPose } from '../framing';
-import { CARD_H, CARD_W, HEAD_Y, SEAT_RADIUS, frameAt, slotAngle } from '../layout';
-import { PROP, SHOWN_PROP, homePose, type Pose } from './cardPose';
+import { CARD_H, CARD_W, HEAD_Y, SEAT_RADIUS, TABLE, frameAt, slotAngle } from '../layout';
+import { PROP, SHOWN_PROP, homePose, settleCard, type Pose } from './cardPose';
 import { seatCoinSlot } from './coinLayout';
 
 /** Same hierarchy as Cards.tsx (face up: the flipper adds nothing). */
@@ -180,5 +181,78 @@ describe('other card poses', () => {
     const own = frameAt(0, SEAT_RADIUS);
     expect(homePose({ slot: 1, isLocal: true, revealed: false }, own, pose()).prop).toBe(PROP);
     expect(homePose({ slot: 1, isLocal: true, revealed: true }, own, pose()).prop).toBe(0);
+  });
+});
+
+describe('card flips', () => {
+  /**
+   * Runs Cards.tsx's per-frame easing from `from` to `to`; returns the lowest corner (m above
+   * the felt), the highest hop of the pivot above the resting height, and the final pose.
+   */
+  function lowestCorner(from: Pose, fromUp: boolean, to: Pose, toUp: boolean, fps: number): { min: number; hop: number; end: Pose } {
+    const outer = new Group();
+    const flipper = new Group();
+    const inner = new Group();
+    const plane = new Group();
+    outer.add(flipper);
+    flipper.add(inner);
+    inner.add(plane);
+    // Resting at `from` (the placed pose in Cards.tsx).
+    outer.position.set(from.x, from.y, from.z);
+    outer.rotation.y = from.yaw;
+    flipper.rotation.z = fromUp ? 0 : Math.PI;
+    inner.rotation.x = -Math.PI / 2 + from.prop;
+    const pts = [
+      [-CARD_W / 2, 0],
+      [CARD_W / 2, 0],
+      [-CARD_W / 2, CARD_H],
+      [CARD_W / 2, CARD_H],
+    ].map(([x, y]) => new Vector3(x, y, 0));
+    const v = new Vector3();
+    let min = Infinity;
+    let hop = 0;
+    for (let i = 0; i < fps * 2; i++) {
+      settleCard({ outer, flipper, inner }, to, toUp, 1 / fps);
+      hop = Math.max(hop, outer.position.y - to.y);
+      outer.updateMatrixWorld(true);
+      for (const p of pts) min = Math.min(min, v.copy(p).applyMatrix4(plane.matrixWorld).y - TABLE.feltY);
+    }
+    const end = { x: outer.position.x, y: outer.position.y, z: outer.position.z, yaw: outer.rotation.y, prop: inner.rotation.x + Math.PI / 2 };
+    return { min, hop, end };
+  }
+
+  it('a revealed opponent card turns face up, then stands, without dipping into the felt', () => {
+    for (const fps of [30, 60, 144]) {
+      for (let n = 2; n <= 6; n++) {
+        for (let seat = 1; seat < n; seat++) {
+          const f = frameAt(slotAngle(seat, n), SEAT_RADIUS);
+          for (const slot of [0, 1]) {
+            const down = homePose({ slot, isLocal: false, revealed: false }, f, pose());
+            const up = homePose({ slot, isLocal: false, revealed: true }, f, pose());
+            const where = `${fps} FPS n=${n} seat ${seat} card ${slot}`;
+            const reveal = lowestCorner(down, false, up, true, fps);
+            expect(reveal.min, `reveal ${where}`).toBeGreaterThanOrEqual(0);
+            // A plain flip: it does not have to jump to clear a card already standing up.
+            expect(reveal.hop, `reveal ${where}`).toBeLessThan(0.17);
+            // …and still ends standing where it should.
+            expect(reveal.end.prop, where).toBeCloseTo(SHOWN_PROP, 2);
+            expect(reveal.end.y, where).toBeCloseTo(up.y, 3);
+            // The other way (a resync straight into a new game keeps the component).
+            expect(lowestCorner(up, true, down, false, fps).min, `hide ${where}`).toBeGreaterThanOrEqual(0);
+          }
+        }
+      }
+    }
+  });
+
+  it("the local player's own cards keep their prop and stay above the felt when revealed", () => {
+    const own = frameAt(0, SEAT_RADIUS);
+    for (const slot of [0, 1]) {
+      const hidden = homePose({ slot, isLocal: true, revealed: false }, own, pose());
+      const shown = homePose({ slot, isLocal: true, revealed: true }, own, pose());
+      const r = lowestCorner(hidden, true, shown, true, 60);
+      expect(r.min).toBeGreaterThanOrEqual(0);
+      expect(r.end.prop).toBeCloseTo(0, 2);
+    }
   });
 });

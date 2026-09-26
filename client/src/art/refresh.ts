@@ -4,8 +4,8 @@
  * arrive late) redraws those canvases IN PLACE — same canvas objects, so materials and
  * textures built on them stay valid — and tells subscribers:
  *  - the 3D scene re-uploads its CanvasTextures (scene/textures.ts);
- *  - HUD code showing data URLs may re-render with `useArtVersion()` to pick up fresh URLs
- *    (optional: a stale <img> just keeps the fallback-font picture).
+ *  - HUD components showing data URLs (GameCard, the Home card fan) subscribe with
+ *    `useArtVersion()` and re-render with the fresh URLs.
  */
 import { useSyncExternalStore } from 'react';
 import { redrawCardArt } from './cardArt';

@@ -102,6 +102,50 @@ describe('RoomManager', () => {
     expect(manager.seatOf('token-a-0003')?.room.code).toBe(mine);
   });
 
+  it('invite switch from a running game is one join: refused → the running seat is untouched; accepted → left, then the new room', () => {
+    const { manager, connect } = setup();
+    const alice = connect('token-alice-09');
+    connect('token-host-009');
+    connect('token-full-009');
+    const old = code(manager.createRoom('token-alice-09', { name: 'Alice' }));
+    manager.addBot('token-alice-09', 'easy');
+    manager.start('token-alice-09');
+    const aliceId = manager.seatOf('token-alice-09')!.playerId;
+    const playing = code(manager.createRoom('token-host-009', { name: 'Host' }));
+    manager.addBot('token-host-009', 'easy');
+    manager.start('token-host-009');
+    const full = code(manager.createRoom('token-full-009', { name: 'Full' }));
+    for (let i = 0; i < 5; i++) manager.addBot('token-full-009', 'easy');
+    alice.clear();
+
+    for (const [target, error, key] of [
+      [playing, 'game_in_progress', undefined],
+      [playing, 'bad_rejoin_key', 'AAAAAAAAAAAAAAAA'],
+      [full, 'room_full', undefined],
+      ['QQQQQ', 'room_not_found', undefined],
+    ] as const) {
+      expect(manager.joinRoom('token-alice-09', target, { name: 'Alice', rejoinKey: key })).toEqual({ ok: false, error });
+      expect(manager.getRoom(old)?.roomStatus).toBe('playing');
+      expect(manager.seatOf('token-alice-09')).toEqual({ room: manager.getRoom(old), playerId: aliceId });
+    }
+    expect(alice.closedReasons).toEqual([]);
+    expect(manager.getRoom(old)!.view(aliceId).players.find((p) => p.id === aliceId)).toMatchObject({
+      connected: true,
+      left: false,
+      botControlled: false,
+    });
+
+    connect('token-lobby-09');
+    const lobby = code(manager.createRoom('token-lobby-09', { name: 'Lobby' }));
+    alice.clear();
+    expect(manager.joinRoom('token-alice-09', lobby, { name: 'Alice' })).toEqual({ ok: true, code: lobby });
+    expect(alice.sent.map((e) => e.event)).toEqual(['room:closed', 'room:state']); // what the client's single join expects
+    expect(alice.closedReasons).toEqual(['left']);
+    expect(alice.lastRoom?.code).toBe(lobby);
+    // Only now is OLD left — and as its only human, it closes (a refused join above kept it alive).
+    expect(manager.getRoom(old)).toBeUndefined();
+  });
+
   it('forgets tokens when their room closes and maps reclaimed seats to the new token', () => {
     const { manager, connect } = setup();
     connect('token-host-004');
@@ -223,6 +267,36 @@ describe('RoomManager', () => {
     expect(events).not.toContain('game:state');
     expect(back.lastRoom?.status).toBe('lobby');
     expect(back.lastRoom?.players.map((p) => p.name)).toEqual(['Host', 'Guest', expect.any(String), 'Newbie']);
+  });
+
+  it('a rejoin link opened after the host returned to the lobby takes the old seat back (no "Bob 2")', () => {
+    const { manager, connect, clock } = setup();
+    connect('token-host-008');
+    const laptop = connect('token-bob-lap8');
+    const c = code(manager.createRoom('token-host-008', { name: 'Host' }));
+    manager.joinRoom('token-bob-lap8', c, { name: 'Bob' });
+    manager.addBot('token-host-008', 'easy');
+    manager.start('token-host-008');
+    const room = manager.getRoom(c)!;
+    expect(clock.runUntil(() => room.roomStatus === 'finished', 6 * 3_600_000)).toBe(true);
+    const bobKey = laptop.lastRoom!.rejoinKey!;
+    const bobId = manager.seatOf('token-bob-lap8')!.playerId;
+    manager.disconnect('token-bob-lap8', laptop); // the laptop dies on the game-over screen
+    expect(manager.backToLobby('token-host-008')).toEqual({ ok: true });
+
+    const phone = connect('token-bob-phn8');
+    expect(manager.joinRoom('token-bob-phn8', c, { name: 'Bob', rejoinKey: bobKey })).toEqual({ ok: true, code: c });
+    expect(manager.seatOf('token-bob-phn8')?.playerId).toBe(bobId);
+    expect(manager.seatOf('token-bob-lap8')).toBeNull();
+    expect(phone.lastRoom?.players.map((p) => p.name)).toEqual(['Host', 'Bob', expect.any(String)]);
+    expect(phone.lastRoom?.rejoinKey).toBe(bobKey);
+    // The old device learns it was replaced when it comes back.
+    expect(connect('token-bob-lap8').closedReasons).toEqual(['replaced']);
+    // The next game deals Bob in once, played by Bob (not by a bot on a ghost seat).
+    expect(manager.start('token-host-008')).toEqual({ ok: true });
+    clock.advance(DEFAULT_TIMING.reconnectGraceMs * 2);
+    const seats = room.view(bobId).players.filter((p) => p.name.startsWith('Bob'));
+    expect(seats).toEqual([expect.objectContaining({ id: bobId, connected: true, botControlled: false })]);
   });
 
   it('closeAll notifies attached players', () => {

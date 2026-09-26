@@ -87,6 +87,11 @@ export const MIN_PHASE_SETTLE_MS = 700;
 export const ROOM_CODE_LENGTH = 5;
 /** Unambiguous uppercase alphabet for room codes (no I, O, 0, 1). */
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/**
+ * Length of a seat's rejoin key: base64url of 12 random bytes (server/rooms/rejoinKey.ts). The
+ * client uses it to trim junk a chat app glued onto a pasted rejoin link.
+ */
+export const REJOIN_KEY_LENGTH = 16;
 export const NAME_MAX_LENGTH = 16;
 export const CLIENT_LOG_LIMIT = 120;
 export const EMOTE_COOLDOWN_MS = 1500;

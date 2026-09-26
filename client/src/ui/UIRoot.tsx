@@ -14,6 +14,7 @@ import { GameHUD } from './game/GameHUD';
 import { HomeScreen } from './home/HomeScreen';
 import { InvitePrompt } from './InvitePrompt';
 import { LobbyScreen } from './lobby/LobbyScreen';
+import { RejoinPrompt } from './RejoinPrompt';
 import { RulesModal } from './RulesModal';
 import { SfxDirector } from './SfxDirector';
 import { Toasts } from './Toasts';
@@ -50,6 +51,7 @@ export function UIRoot() {
       {screen === 'dealing' && <DealingNotice />}
       <RulesModal />
       <InvitePrompt />
+      <RejoinPrompt />
       <Toasts />
       <ConnectionBanner />
       <ReplacedPanel />

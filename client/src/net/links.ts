@@ -2,7 +2,7 @@
  * Pure helpers for room links: invite `/?room=CODE` and seat rejoin `/?room=CODE&key=KEY`.
  * No DOM access — callers pass `location.href` / `location.origin` so they are unit-testable.
  */
-import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@shared/constants';
+import { REJOIN_KEY_LENGTH, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@shared/constants';
 
 export interface RoomLink {
   /** Upper-cased, sanitised room code. */
@@ -21,13 +21,21 @@ export function sanitizeCode(raw: string): string {
   return out;
 }
 
+/**
+ * Keeps only base64url characters (what the server generates) and at most REJOIN_KEY_LENGTH of
+ * them, so junk a chat app glued onto a pasted link (`KEY.`, `KEY)`, `KEY-`) does not spoil it.
+ */
+export function sanitizeRejoinKey(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, REJOIN_KEY_LENGTH);
+}
+
 /** Reads `?room=` (and `&key=`) from a URL. null when there is no usable room code. */
 export function parseRoomLink(href: string): RoomLink | null {
   try {
     const params = new URL(href).searchParams;
     const code = sanitizeCode(params.get('room') ?? '');
     if (code.length !== ROOM_CODE_LENGTH) return null;
-    const key = params.get('key')?.trim();
+    const key = sanitizeRejoinKey(params.get('key') ?? '');
     return key ? { code, key } : { code };
   } catch {
     return null;

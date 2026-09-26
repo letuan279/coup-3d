@@ -28,6 +28,40 @@ export function chooseTarget(playerId: string): void {
   setCursor(null);
 }
 
+/** The part of R3F's ThreeEvent the seat handlers use. */
+interface StoppableEvent {
+  stopPropagation(): void;
+}
+
+export interface SeatPointerHandlers {
+  onClick(e: StoppableEvent): void;
+  onPointerOver(e: StoppableEvent): void;
+  onPointerOut(): void;
+}
+
+/**
+ * Pointer handlers of a seat's pickable meshes: the character's hit box and, in a game, the
+ * opponent's cards. Hover and click both stop at the first mesh hit, targetable or not: R3F
+ * hands a click on to whatever lies behind until a handler stops it, so a mesh that highlights
+ * its seat on hover must also swallow the click — else an eliminated player's standing card
+ * would pass it to the neighbour's hit box behind (SCN-1). chooseTarget ignores non-targets.
+ */
+export function seatPointerHandlers(playerId: string): SeatPointerHandlers {
+  return {
+    onClick(e) {
+      e.stopPropagation();
+      chooseTarget(playerId);
+    },
+    onPointerOver(e) {
+      e.stopPropagation();
+      hoverEnter(playerId);
+    },
+    onPointerOut() {
+      hoverLeave(playerId);
+    },
+  };
+}
+
 let cursorEl: HTMLElement | null = null;
 /** The seat currently under the pointer in the 3D view (character, card or nameplate). */
 let pointerOver: string | null = null;

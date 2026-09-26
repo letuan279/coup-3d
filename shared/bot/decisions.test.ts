@@ -533,6 +533,57 @@ describe('losing influence and exchanging', () => {
   });
 });
 
+describe('heads-up challenge margin (BOT-TUNE-1)', () => {
+  /**
+   * Heads-up, the opponent claims Tax from 4 coins (into coup range) right after an exchange.
+   * Before it, the bot's steal and Foreign Aid were either blocked (Captain, Duke: a habit of
+   * blocking everything) or let through. The exchange resets the claims, so the Tax claim itself
+   * reads the same either way: only the opponent's record differs.
+   */
+  function taxAfter(blocked: boolean, me: string): GameView {
+    const seats: SeatSpec[] = [
+      { id: me, cards: ['duke', 'captain'], coins: 3 },
+      { id: 'a', cards: ['duke', 'ambassador'], coins: 4 },
+    ];
+    const log: GameEvent[] = [];
+    for (const [action, blocker] of [
+      [declared('steal', me, 'a'), 'captain'],
+      [declared('foreign_aid', me), 'duke'],
+    ] as const) {
+      log.push(actionEvent(action));
+      if (blocked) {
+        log.push(
+          { type: 'block', blockerId: 'a', character: blocker, actorId: me, action: action.type },
+          { type: 'action_blocked', actorId: me, action: action.type, blockerId: 'a', character: blocker },
+        );
+      } else {
+        log.push({ type: 'action_resolved', actorId: me, action: action.type, ...(action.targetId ? { targetId: 'a' } : {}) });
+      }
+    }
+    log.push(actionEvent(declared('exchange', 'a')), { type: 'exchange_done', playerId: 'a', returned: 2 });
+    const tax = declared('tax', 'a');
+    return buildView({ me, seats, prompt: respondActionPrompt(tax, me), pendingAction: tax, log: [...log, actionEvent(tax)] });
+  }
+
+  function challengeRate(blocked: boolean): number {
+    const ids = Array.from({ length: 40 }, (_, k) => `bot-${k}`);
+    let sum = 0;
+    for (const me of ids) sum += share(movesFor(taxAfter(blocked, me), 'hard', 5), (m) => m.type === 'challenge');
+    return sum / ids.length;
+  }
+
+  it('hard calls a doubtful claim more readily from a player whose record shows bluffing', () => {
+    const clean = challengeRate(false);
+    const habit = challengeRate(true);
+    // A close call against a clean record (a bold margin for everyone over-challenges honest
+    // players)…
+    expect(clean).toBeGreaterThan(0.2);
+    expect(clean).toBeLessThan(0.75);
+    // …but a player who blocks everything gets called.
+    expect(habit).toBeGreaterThan(clean + 0.2);
+  });
+});
+
 describe('reviewed exploits', () => {
   it('bluffs Contessa with two cards only now and then, and never against a known Contessa caller (bot-4)', () => {
     const called: GameEvent[] = [

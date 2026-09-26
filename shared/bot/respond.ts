@@ -6,7 +6,7 @@
  */
 import { ACTIONS, COUP_COST } from '../constants';
 import type { Character, DeclaredAction, DeclaredBlock, GameView, Move, Prompt } from '../types';
-import { blockHabit, holdProbability, isCertainBluff, roundLength } from './knowledge';
+import { blockHabit, bluffEvidence, holdProbability, isCertainBluff, roundLength } from './knowledge';
 import type { PlayerIntel } from './knowledge';
 import type { BeliefDepth } from './personality';
 import { botLossForOpponent, challengeRisk } from './risk';
@@ -118,12 +118,23 @@ function valueAfterCaughtBlock(S: Situation, act: DeclaredAction, effect: number
  */
 function challengeMargin(S: Situation, act: DeclaredAction, effect: number): number {
   // Heads-up the gain is not shared with anyone: only model error argues for caution.
-  if (S.K.opponents.length <= 1) return S.tune.duelChallengeMargin - stalematePressure(S);
+  if (S.K.opponents.length <= 1) return duelMargin(S, act) - stalematePressure(S);
   let m = S.tune.challengeMargin - stalematePressure(S);
   if (act.targetId === S.me.id) return m;
   if (act.targetId) m += 0.06; // the victim is more motivated to call it
   const stakes = Math.min(1, Math.abs(effect) / 0.3);
   return m + 0.12 * (1 - stakes);
+}
+
+/**
+ * Heads-up margin: cautious against an unknown or honest-looking actor (challenging an honest
+ * player only ever hands over a card), bolder the more the actor's record shows bluffing.
+ */
+function duelMargin(S: Situation, act: DeclaredAction): number {
+  const { duelChallengeMargin: cautious, duelBlufferMargin: bold } = S.tune;
+  const actor = S.K.players.get(act.actorId);
+  if (!actor || cautious === bold) return cautious;
+  return cautious - (cautious - bold) * bluffEvidence(actor);
 }
 
 /**

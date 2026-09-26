@@ -22,7 +22,7 @@ export const API_TIMEOUT_MS = 8000;
 
 /**
  * After the first connect, how long to wait for the server to re-attach us to a seat (it pushes
- * `room:state` right away) before using a rejoin link from the URL.
+ * `room:state` right away) before offering to use a rejoin link from the URL.
  */
 export const ATTACH_SETTLE_MS = 500;
 
@@ -100,7 +100,9 @@ export function connectSocket(): ClientSocket {
     if (invite?.key && !room) {
       settleTimer = setTimeout(() => {
         settleTimer = null;
-        void tryRejoinLink();
+        const now = useGame.getState();
+        // Ask first (RejoinPrompt) — never take the seat from the device playing it by ourselves.
+        if (now.invite?.key && !now.room) setRejoinAsked(true);
       }, ATTACH_SETTLE_MS);
     }
   });
@@ -150,6 +152,7 @@ export function connectSocket(): ClientSocket {
 
 function onRoomState(room: RoomView): void {
   cancelSettle(); // we are seated: a rejoin link must not pull us out of this room
+  setRejoinAsked(false);
   const { invite } = useGame.getState();
   const consumed = invite !== null && invite.code === room.code;
   useGame.setState((st) => ({
@@ -223,15 +226,48 @@ function joinName(profile: Profile, fallback?: string): string {
   return profile.name.trim() || fallback || translate(useGame.getState().ui.lang, `avatar.${profile.avatar}`);
 }
 
+// ───────────── Rejoin link confirmation ─────────────
+
 /**
- * Opened with `/?room=CODE&key=KEY` and not seated anywhere: reclaim that seat. On failure, explain
- * and fall back to the normal Home (the dead link is removed from the URL).
+ * The page was opened with `/?room=CODE&key=KEY`, and once the server had its chance to re-attach
+ * us we were still not seated: the HUD asks "play your seat on this device?" (RejoinPrompt)
+ * instead of reclaiming by itself, so a stray visit to the link (a preview browser, an old
+ * bookmark on another device) cannot silently take the seat from the device playing it.
  */
-async function tryRejoinLink(): Promise<void> {
+let rejoinAsked = false;
+const rejoinListeners = new Set<() => void>();
+
+function setRejoinAsked(v: boolean): void {
+  if (rejoinAsked === v) return;
+  rejoinAsked = v;
+  for (const fn of [...rejoinListeners]) fn();
+}
+
+/** Whether the rejoin-link question is up (a `useSyncExternalStore` snapshot, with `onRejoinAsked`). */
+export function isRejoinAsked(): boolean {
+  return rejoinAsked;
+}
+
+/** Subscribe to `isRejoinAsked()` changes; returns the unsubscribe function. */
+export function onRejoinAsked(fn: () => void): () => void {
+  rejoinListeners.add(fn);
+  return () => {
+    rejoinListeners.delete(fn);
+  };
+}
+
+/**
+ * [Vào lại] on the rejoin-link question: reclaim the seat of `/?room=CODE&key=KEY`. On failure,
+ * explain and fall back to the normal Home (the dead link is removed from the URL).
+ */
+export async function confirmRejoin(): Promise<void> {
   const { invite, room, profile } = useGame.getState();
-  if (!invite?.key || room) return;
+  if (!invite?.key || invite.joining || room) return;
   useGame.setState({ invite: { ...invite, joining: true } });
-  const res = await api.joinRoom(invite.code, joinName(profile), profile.avatar, invite.key);
+  // Only a name the player typed: a key that no longer matches a lobby seat then joins under it,
+  // never under a made-up avatar name (without one the server answers bad_rejoin_key).
+  const res = await api.joinRoom(invite.code, profile.name.trim(), profile.avatar, invite.key);
+  setRejoinAsked(false);
   if (res.ok) {
     // room:state normally consumed the invite already; make sure the key does not linger.
     const now = useGame.getState().invite;
@@ -244,8 +280,20 @@ async function tryRejoinLink(): Promise<void> {
   useGame.getState().toast(errorKey(res.error), 'error');
 }
 
+/**
+ * [Để sau]: close the question. The code stays pre-filled on Home, and an explicit "Join" there
+ * still uses the key (see `inviteKeyFor`); the secret leaves the address bar.
+ */
+export function declineRejoin(): void {
+  const { invite, room } = useGame.getState();
+  if (invite?.joining) return; // already answered with [Vào lại]
+  setRejoinAsked(false);
+  if (invite && !room) writeUrlRoom(invite.code);
+}
+
 /** Home: the player chose to create/join something themselves — forget the link. */
 export function clearInvite(): void {
+  setRejoinAsked(false);
   if (useGame.getState().invite) useGame.setState({ invite: null });
 }
 
@@ -257,28 +305,38 @@ export function inviteKeyFor(code: string): string | undefined {
 
 /** "Stay in OLD": drop the pending invite and show the current room in the URL again. */
 export function dismissInvite(): void {
+  setRejoinAsked(false);
   useGame.setState({ invite: null });
   writeUrlRoom(useGame.getState().room?.code ?? null);
 }
 
-/** "Leave OLD and join NEW": leave the room we are seated in, then join the invited one. */
+/** Join errors that clicking again will not fix: the invite prompt stops offering the link. */
+const DEAD_INVITE_ERRORS = new Set(['room_not_found', 'game_in_progress', 'room_full']);
+
+/**
+ * "Leave OLD and join NEW" as ONE `room:join`: the server checks NEW first and leaves OLD only
+ * once NEW has accepted us (room:closed 'left' for OLD, then room:state for NEW, which consumes
+ * the invite). Never leave first: a join that then fails (NEW started, full, gone, bad key) would
+ * throw the OLD seat away. On failure we are still seated in OLD; the caller shows the error.
+ */
 export async function acceptInvite(): Promise<ApiResult<{ code: string }>> {
   const { invite, room, profile } = useGame.getState();
   if (!invite) return { ok: false, error: 'bad_request' };
   const oldName = room?.players.find((p) => p.id === room.youId)?.name;
-  if (room) {
-    const left = await api.leaveRoom();
-    if (!left.ok && left.error !== 'not_in_room') return left;
-  }
   const res = await api.joinRoom(invite.code, joinName(profile, oldName), profile.avatar, invite.key);
-  if (!res.ok) {
-    // Stay on Home with the invited code pre-filled (a rejected key is not offered again).
-    const keep = res.error === 'bad_rejoin_key' ? { code: invite.code } : { code: invite.code, key: invite.key };
-    if (!useGame.getState().room) {
-      useGame.setState({ invite: keep });
-      writeUrlRoom(invite.code);
-    }
+  if (res.ok || useGame.getState().invite?.code !== invite.code) return res;
+  // A rejected key is never offered again.
+  const keep = res.error === 'bad_rejoin_key' || !invite.key ? { code: invite.code } : { code: invite.code, key: invite.key };
+  if (!useGame.getState().room) {
+    // OLD went away meanwhile: stay on Home with the invited code pre-filled.
+    useGame.setState({ invite: keep });
+    writeUrlRoom(invite.code);
+  } else if (DEAD_INVITE_ERRORS.has(res.error)) {
+    dismissInvite(); // still in OLD: stop offering a link that cannot work
+  } else if (res.error === 'bad_rejoin_key') {
+    useGame.setState({ invite: keep }); // the prompt now offers a plain join
   }
+  // Anything else (timeout, disconnected, rate_limited…): the prompt stays so the player can retry.
   return res;
 }
 
@@ -331,10 +389,16 @@ export function shouldReportMoveError(error: string, sentPhaseSeq: number, curre
 export const api = {
   createRoom: (name: string, avatar?: AvatarId) =>
     call<{ code: string }>((s, ack) => s.emit('room:create', { name, avatar }, ack as never), ['room:create', { name, avatar }]),
-  /** `rejoinKey` reclaims your own seat in a running game (from a rejoin link); ignored in the lobby. */
-  joinRoom: (code: string, name: string, avatar?: AvatarId, rejoinKey?: string) => {
+  /**
+   * `rejoinKey` (from a rejoin link) reclaims your own seat, lobby included; with it `name` may be
+   * '' (a reclaim ignores the profile). If you are seated elsewhere, the server leaves that room
+   * only once this join is accepted. A keyed join refused as `bad_request` (a key the server
+   * cannot even parse) is reported as `bad_rejoin_key`, which the player can act on.
+   */
+  joinRoom: async (code: string, name: string, avatar?: AvatarId, rejoinKey?: string): Promise<ApiResult<{ code: string }>> => {
     const payload = { code: code.toUpperCase().trim(), name, avatar, ...(rejoinKey ? { rejoinKey } : {}) };
-    return call<{ code: string }>((s, ack) => s.emit('room:join', payload, ack as never), ['room:join', payload]);
+    const res = await call<{ code: string }>((s, ack) => s.emit('room:join', payload, ack as never), ['room:join', payload]);
+    return !res.ok && rejoinKey && res.error === 'bad_request' ? { ok: false, error: 'bad_rejoin_key' } : res;
   },
   leaveRoom: () => call((s, ack) => s.emit('room:leave', ack as never), ['room:leave', null]),
   updatePlayer: (p: { name?: string; avatar?: AvatarId }) => call((s, ack) => s.emit('player:update', p, ack as never), ['player:update', p]),

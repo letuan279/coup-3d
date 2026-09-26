@@ -210,6 +210,10 @@ export const ui: DictPair = {
     'invite.bodyPlaying': 'Ván ở phòng {old} vẫn đang diễn ra: nếu rời đi, bot sẽ chơi thay bạn đến hết ván.',
     'invite.stay': 'Ở lại {old}',
     'invite.switch': 'Rời và vào {new}',
+    'rejoin.title': 'Chơi ghế của bạn trong phòng {code} trên thiết bị này?',
+    'rejoin.body': 'Nếu ghế này đang mở trên máy khác, máy đó sẽ bị ngắt khỏi phòng {code}.',
+    'rejoin.confirm': 'Vào lại',
+    'rejoin.later': 'Để sau',
 
     // ── game over ──
     'over.youWin': 'Bạn thắng!',
@@ -493,6 +497,10 @@ export const ui: DictPair = {
     'invite.bodyPlaying': 'The game in room {old} is still running: if you leave, a bot will play your seat until it ends.',
     'invite.stay': 'Stay in {old}',
     'invite.switch': 'Leave and join {new}',
+    'rejoin.title': 'Play your seat in room {code} on this device?',
+    'rejoin.body': 'If this seat is open on another device, that device will be disconnected from room {code}.',
+    'rejoin.confirm': 'Rejoin',
+    'rejoin.later': 'Later',
 
     'over.youWin': 'You win!',
     'over.playerWins': '{name} wins!',

@@ -22,6 +22,9 @@ export const CARD_RADIUS = 1.02;
 export const LOCAL_CARD_RADIUS = 0.9;
 export const CARD_W = 0.25;
 export const CARD_H = 0.35;
+/** A character's invisible pick box (seat-local space: the chair and the animal on it). */
+export const HIT_BOX_SIZE: [number, number, number] = [0.9, 1.5, 0.9];
+export const HIT_BOX_CENTER: [number, number, number] = [0, 1.1, 0.05];
 /** Height of a character's eyes / nameplate anchor above the floor (local seat space). */
 export const HEAD_Y = 1.46;
 export const PLATE_Y = 1.98;

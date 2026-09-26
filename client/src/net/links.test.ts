@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hrefWithRoom, inviteLink, isLocalHostname, parseRoomLink, rejoinLink, sanitizeCode } from './links';
+import { REJOIN_KEY_LENGTH } from '@shared/constants';
+import { hrefWithRoom, inviteLink, isLocalHostname, parseRoomLink, rejoinLink, sanitizeCode, sanitizeRejoinKey } from './links';
 
 describe('room links', () => {
   it('parses ?room= and &key=, normalising the code', () => {
@@ -19,7 +20,22 @@ describe('room links', () => {
   it('builds invite and rejoin links', () => {
     expect(inviteLink('http://192.168.1.5:3000', 'KX7QP')).toBe('http://192.168.1.5:3000/?room=KX7QP');
     expect(rejoinLink('https://coup.example', 'KX7QP', 'a+b/c')).toBe('https://coup.example/?room=KX7QP&key=a%2Bb%2Fc');
-    expect(parseRoomLink(rejoinLink('https://coup.example', 'KX7QP', 'a+b/c'))).toEqual({ code: 'KX7QP', key: 'a+b/c' });
+    const key = 'aB3_-xYz09QwErTy';
+    expect(parseRoomLink(rejoinLink('https://coup.example', 'KX7QP', key))).toEqual({ code: 'KX7QP', key });
+  });
+
+  it('cleans junk a chat app glued onto a rejoin key (UI-NET-3)', () => {
+    const key = 'aB3_-xYz09QwErTy';
+    expect(key).toHaveLength(REJOIN_KEY_LENGTH);
+    const link = rejoinLink('https://coup.example', 'KX7QP', key);
+    for (const junk of ['.', ')', '!', '%20', '-', '_', '...', '),', 'abc']) {
+      expect(parseRoomLink(`${link}${junk}`), junk).toEqual({ code: 'KX7QP', key });
+    }
+    expect(parseRoomLink(`https://coup.example/?room=KX7QP&key=(${key})`)).toEqual({ code: 'KX7QP', key });
+    expect(parseRoomLink(`https://coup.example/?room=KX7QP&key=%20${key}%0A`)).toEqual({ code: 'KX7QP', key });
+    // Nothing usable left: a plain invite.
+    expect(parseRoomLink('https://coup.example/?room=KX7QP&key=...')).toEqual({ code: 'KX7QP' });
+    expect(sanitizeRejoinKey(' ab+c/d=é ')).toBe('abcd');
   });
 
   it('detects hosts only reachable from this machine', () => {

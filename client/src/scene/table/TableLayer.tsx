@@ -28,7 +28,6 @@ export const TableLayer = memo(function TableLayer({
 }) {
   const targetKey = useTargetKey();
   const targeting = useGame((s) => s.ui.targeting);
-  const targets = useMemo(() => new Set(targetKey ? targetKey.split(',') : []), [targetKey]);
 
   useEffect(() => {
     resetCoinFlights();
@@ -108,7 +107,6 @@ export const TableLayer = memo(function TableLayer({
           spec={c}
           lang={lang}
           interactive={model.mode === 'game' && !c.isLocal}
-          targetable={targets.has(c.playerId)}
         />
       ))}
       <Coins state={coins} />

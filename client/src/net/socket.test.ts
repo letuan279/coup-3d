@@ -220,6 +220,17 @@ describe('api calls', () => {
     expect(sock.emitted[1].args[0]).toEqual({ code: 'KX7QP', name: 'Tuấn', avatar: 'fox', rejoinKey: 'SECRET' });
   });
 
+  it('a keyed join the server cannot parse is reported as a bad rejoin link, not "invalid request" (UI-NET-3)', async () => {
+    const { net, connect, ack } = await load();
+    connect();
+    const keyed = net.api.joinRoom('KX7QP', 'Tuấn', 'fox', 'SECRET');
+    const plain = net.api.joinRoom('KX7QP', '', 'fox');
+    ack(0, null, { ok: false, error: 'bad_request' });
+    ack(1, null, { ok: false, error: 'bad_request' });
+    expect(await keyed).toEqual({ ok: false, error: 'bad_rejoin_key' });
+    expect(await plain).toEqual({ ok: false, error: 'bad_request' });
+  });
+
   it('a move lost in a disconnect or outdated by a resync is not reported as rejected', async () => {
     const { net, useGame, bus, fire, connect, ack } = await load();
     connect();
@@ -310,7 +321,7 @@ describe('game / room pushes', () => {
 });
 
 describe('invite link while still seated in another room', () => {
-  it('keeps the invite, asks, and "leave then join" lands in the invited room', async () => {
+  it('keeps the invite, asks, and "leave and join" is ONE room:join that lands in the invited room', async () => {
     const { net, useGame, sock, fire, connect, ack } = await load('http://localhost:5173/?room=newxx');
     expect(useGame.getState().invite).toEqual({ code: 'NEWXX' });
     connect();
@@ -320,18 +331,62 @@ describe('invite link while still seated in another room', () => {
     expect(href()).toBe('http://localhost:5173/?room=newxx'); // not overwritten
 
     const done = net.acceptInvite();
-    expect(sock.emitted.map((e) => e.ev)).toEqual(['room:leave']);
+    // No room:leave first: the server leaves OLD only once NEW has accepted the join.
+    expect(sock.emitted.map((e) => e.ev)).toEqual(['room:join']);
+    expect(sock.emitted[0].args[0]).toMatchObject({ code: 'NEWXX', name: 'Tuấn' }); // old seat name
+    expect(useGame.getState().room?.code).toBe('OLDYY'); // still seated while waiting
+    // What the server sends on success: room:closed 'left' for OLD, then room:state for NEW.
     fire('room:closed', { reason: 'left' });
-    expect(href()).toBe('http://localhost:5173/?room=NEWXX'); // Home would pre-fill NEWXX
-    ack(0, null, { ok: true });
-    await flush();
-    expect(sock.emitted.map((e) => e.ev)).toEqual(['room:leave', 'room:join']);
-    expect(sock.emitted[1].args[0]).toMatchObject({ code: 'NEWXX', name: 'Tuấn' }); // old seat name
-    fire('room:state', room('NEWXX'));
-    ack(1, null, { ok: true, code: 'NEWXX' });
-    expect(await done).toEqual({ ok: true, code: 'NEWXX' });
-    expect(useGame.getState().invite).toBeNull();
+    expect(useGame.getState().invite).toEqual({ code: 'NEWXX' });
     expect(href()).toBe('http://localhost:5173/?room=NEWXX');
+    fire('room:state', room('NEWXX'));
+    ack(0, null, { ok: true, code: 'NEWXX' });
+    expect(await done).toEqual({ ok: true, code: 'NEWXX' });
+    expect(sock.emitted.map((e) => e.ev)).toEqual(['room:join']);
+    expect(useGame.getState().room?.code).toBe('NEWXX');
+    expect(useGame.getState().invite).toBeNull();
+    expect(useGame.getState().ui.toasts).toEqual([]);
+    expect(href()).toBe('http://localhost:5173/?room=NEWXX');
+  });
+
+  it('a join that cannot work keeps the running OLD seat, and the dead link is no longer offered (UI-NET-1)', async () => {
+    const { net, useGame, sock, fire, connect, ack } = await load('http://localhost:5173/?room=NEWXX');
+    connect();
+    fire('room:state', room('OLDYY', 'playing', { rejoinKey: 'OLDKEY' }));
+    for (const error of ['game_in_progress', 'room_full', 'room_not_found']) {
+      useGame.setState({ invite: { code: 'NEWXX' } });
+      const n = sock.emitted.length;
+      const done = net.acceptInvite();
+      ack(n, null, { ok: false, error });
+      expect(await done).toEqual({ ok: false, error });
+      expect(useGame.getState().room).toMatchObject({ code: 'OLDYY', rejoinKey: 'OLDKEY' });
+      expect(useGame.getState().invite, error).toBeNull(); // → InvitePrompt closes
+      expect(href()).toBe('http://localhost:5173/?room=OLDYY');
+    }
+    expect(sock.emitted.map((e) => e.ev)).not.toContain('room:leave');
+  });
+
+  it('a transient failure keeps both the seat and the question; a rejected key is dropped', async () => {
+    const { net, useGame, sock, fire, connect, ack } = await load('http://localhost:5173/?room=NEWXX&key=NEWKEY');
+    connect();
+    fire('room:state', room('OLDYY', 'playing'));
+    expect(useGame.getState().invite).toEqual({ code: 'NEWXX', key: 'NEWKEY' });
+
+    const slow = net.acceptInvite();
+    ack(0, new Error('operation has timed out'));
+    expect(await slow).toEqual({ ok: false, error: 'timeout' });
+    expect(useGame.getState().room?.code).toBe('OLDYY');
+    expect(useGame.getState().invite).toEqual({ code: 'NEWXX', key: 'NEWKEY' }); // retry possible
+
+    const bad = net.acceptInvite();
+    expect(sock.emitted[1].args[0]).toMatchObject({ code: 'NEWXX', rejoinKey: 'NEWKEY' });
+    ack(1, null, { ok: false, error: 'bad_rejoin_key' });
+    expect(await bad).toEqual({ ok: false, error: 'bad_rejoin_key' });
+    expect(useGame.getState().room?.code).toBe('OLDYY');
+    expect(useGame.getState().invite).toEqual({ code: 'NEWXX' }); // now a plain invite
+    void net.acceptInvite();
+    expect(sock.emitted[2].args[0].rejoinKey).toBeUndefined();
+    expect(sock.emitted.map((e) => e.ev)).toEqual(['room:join', 'room:join', 'room:join']);
   });
 
   it('"stay" keeps the old room and puts its code back in the URL', async () => {
@@ -354,41 +409,104 @@ describe('invite link while still seated in another room', () => {
 });
 
 describe('rejoin link (?room=CODE&key=KEY)', () => {
-  it('not seated: reclaims the seat automatically, then strips the key', async () => {
+  it('not seated: asks first — never reclaims by itself (SRV-SEAM-3)', async () => {
     vi.useFakeTimers();
-    const { useGame, sock, fire, connect, ack } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
+    const { net, useGame, sock, connect } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
     expect(useGame.getState().invite).toEqual({ code: 'KX7QP', key: 'SECRET' });
     connect();
-    expect(sock.emitted).toEqual([]); // waits for a possible re-attach first
+    expect(net.isRejoinAsked()).toBe(false); // waits for a possible re-attach first
+    const seen: boolean[] = [];
+    const off = net.onRejoinAsked(() => seen.push(net.isRejoinAsked()));
     vi.advanceTimersByTime(500);
+    expect(net.isRejoinAsked()).toBe(true); // → RejoinPrompt shows
+    expect(seen).toEqual([true]);
+    off();
+    vi.advanceTimersByTime(60_000);
+    expect(sock.emitted).toEqual([]); // nothing is sent without a click
+    expect(useGame.getState().invite).toEqual({ code: 'KX7QP', key: 'SECRET' });
+  });
+
+  it('[Vào lại] reclaims the seat, then strips the key', async () => {
+    vi.useFakeTimers();
+    const { net, useGame, sock, fire, connect, ack } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
+    useGame.getState().setProfile({ name: '  Tuấn ' });
+    connect();
+    vi.advanceTimersByTime(500);
+    const done = net.confirmRejoin();
+    void net.confirmRejoin(); // a double click sends nothing more
     expect(sock.emitted.map((e) => e.ev)).toEqual(['room:join']);
-    expect(sock.emitted[0].args[0]).toMatchObject({ code: 'KX7QP', rejoinKey: 'SECRET' });
+    expect(sock.emitted[0].args[0]).toMatchObject({ code: 'KX7QP', name: 'Tuấn', rejoinKey: 'SECRET' });
     expect(useGame.getState().invite?.joining).toBe(true);
+    net.declineRejoin(); // too late to back out: ignored
+    expect(net.isRejoinAsked()).toBe(true);
     fire('room:state', room('KX7QP', 'playing', { rejoinKey: 'NEWKEY' }));
     ack(0, null, { ok: true, code: 'KX7QP' });
-    await vi.runAllTimersAsync();
+    await done;
+    expect(net.isRejoinAsked()).toBe(false);
     expect(useGame.getState().invite).toBeNull();
     expect(href()).toBe('http://localhost:5173/?room=KX7QP');
   });
 
-  it('a bad key explains itself and falls back to the normal Home', async () => {
+  it('with no name typed, the reclaim sends no made-up name (UI-NET-2)', async () => {
     vi.useFakeTimers();
-    const { useGame, connect, ack } = await load('http://localhost:5173/?room=KX7QP&key=WRONG');
+    const { net, useGame, sock, connect } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
+    useGame.getState().setProfile({ name: '' });
     connect();
     vi.advanceTimersByTime(500);
+    void net.confirmRejoin();
+    expect(sock.emitted[0].args[0]).toMatchObject({ code: 'KX7QP', name: '', rejoinKey: 'SECRET' });
+  });
+
+  it('[Để sau] closes the question without joining; Home keeps the code and an explicit Join still uses the key', async () => {
+    vi.useFakeTimers();
+    const { net, useGame, sock, connect } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
+    connect();
+    vi.advanceTimersByTime(500);
+    net.declineRejoin();
+    expect(net.isRejoinAsked()).toBe(false);
+    expect(sock.emitted).toEqual([]);
+    expect(href()).toBe('http://localhost:5173/?room=KX7QP'); // the secret leaves the address bar
+    expect(useGame.getState().invite).toEqual({ code: 'KX7QP', key: 'SECRET' });
+    expect(net.inviteKeyFor('kx7qp')).toBe('SECRET');
+  });
+
+  it('a bad key explains itself and falls back to the normal Home', async () => {
+    vi.useFakeTimers();
+    const { net, useGame, connect, ack } = await load('http://localhost:5173/?room=KX7QP&key=WRONG');
+    connect();
+    vi.advanceTimersByTime(500);
+    void net.confirmRejoin();
     ack(0, null, { ok: false, error: 'bad_rejoin_key' });
     await vi.advanceTimersByTimeAsync(0);
+    expect(net.isRejoinAsked()).toBe(false);
     expect(useGame.getState().invite).toBeNull();
     expect(useGame.getState().ui.toasts.map((t) => t.text)).toContain('error.bad_rejoin_key');
     expect(href()).toBe('http://localhost:5173/');
   });
 
-  it('already seated (the server re-attached us): never sends a join that would leave that seat', async () => {
+  it('a key with junk a chat app glued on still works; a malformed one says "bad rejoin link" (UI-NET-3)', async () => {
     vi.useFakeTimers();
-    const { useGame, sock, fire, connect } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
+    const key = 'aB3_-xYz09QwErTy';
+    const { net, useGame, sock, connect, ack } = await load(`http://localhost:5173/?room=KX7QP&key=${key}).`);
+    expect(useGame.getState().invite).toEqual({ code: 'KX7QP', key });
+    connect();
+    vi.advanceTimersByTime(500);
+    void net.confirmRejoin();
+    expect(sock.emitted[0].args[0].rejoinKey).toBe(key);
+    ack(0, null, { ok: false, error: 'bad_request' }); // e.g. an older server rejecting the key's format
+    await vi.advanceTimersByTimeAsync(0);
+    const toasts = useGame.getState().ui.toasts.map((t) => t.text);
+    expect(toasts).toContain('error.bad_rejoin_key');
+    expect(toasts).not.toContain('error.bad_request');
+  });
+
+  it('already seated (the server re-attached us): never asks nor sends a join that would leave that seat', async () => {
+    vi.useFakeTimers();
+    const { net, useGame, sock, fire, connect } = await load('http://localhost:5173/?room=KX7QP&key=SECRET');
     connect();
     fire('room:state', room('KX7QP', 'playing'));
     vi.advanceTimersByTime(2000);
+    expect(net.isRejoinAsked()).toBe(false);
     expect(sock.emitted).toEqual([]);
     expect(useGame.getState().invite).toBeNull();
     expect(href()).toBe('http://localhost:5173/?room=KX7QP'); // key stripped

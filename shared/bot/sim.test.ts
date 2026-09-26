@@ -4,10 +4,14 @@
  * opponents (scripted.ts; `npx tsx scripts/simulate.ts --exploits`) that a human could copy.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { BotLevel } from '../types';
+import { createRng } from '../rng';
+import type { BotLevel, DeclaredAction, DeclaredBlock, GameView, Move } from '../types';
+import { SCRIPTS } from './scripted';
 import type { ScriptId } from './scripted';
 import { ALL_LEVELS, emptyReport, ratio, scriptWinRate, simulate, simulateExploit, winShare } from './simulation';
 import type { LevelStats, SimReport } from './simulation';
+import { actionEvent, buildView, chooseActionPrompt, declared, respondActionPrompt } from './test-helpers';
+import type { SeatSpec } from './test-helpers';
 
 const SMART: readonly BotLevel[] = ['normal', 'hard'];
 
@@ -141,6 +145,11 @@ describe('exploit scripts against the bots', () => {
     }
     plan.push(['contessaCaller', 'normal', 2]);
     for (const level of SMART) for (const players of [2, 3]) plan.push(['dukeTellCaller', level, players]);
+    for (const level of SMART) {
+      for (const players of [2, 3]) plan.push(['alwaysChallenge', level, players]);
+      // Heads-up every claim hits it: there it plays exactly like the always-challenger.
+      plan.push(['challengeWhenHit', level, 3]);
+    }
     for (const [script, level, players] of plan) {
       runs.set(key(script, level, players), simulateExploit({ script, level, players, games: GAMES, seed: 7 }));
     }
@@ -151,8 +160,9 @@ describe('exploit scripts against the bots', () => {
   });
 
   it('the always-bluff liar does no better against hard than against normal (bot-1)', () => {
-    // (Measured over 3000 games per cell: about +1.5 to +2.5 points, within sampling noise of
-    // these 1500-game cells; it was +17 heads-up and +6 at three players before the fixes.)
+    // (Measured over 20000 games per cell: about +3.5 points heads-up — hard stays cautious with
+    // players whose record shows no bluffing, see BOT-TUNE-1 — and +2 at three players; it was
+    // +17 heads-up and +6 at three players before the fixes.)
     for (const players of [2, 3]) {
       expect(rate('liar', 'hard', players)).toBeLessThan(rate('liar', 'normal', players) + 0.05);
       expect(rate('liar', 'hard', players)).toBeLessThan(1 / players);
@@ -170,6 +180,22 @@ describe('exploit scripts against the bots', () => {
     // not hand the honest player much.
     expect(rate('honest', 'hard', 2)).toBeLessThan(0.29);
     expect(rate('honest', 'hard', 3)).toBeLessThan(0.325);
+  });
+
+  it('heads-up, hard does not over-challenge a player who never bluffs (BOT-TUNE-1)', () => {
+    // About 22% over 20000 games; a flat, bold duel margin (0.15) for everyone gave 26%.
+    expect(rate('honest', 'hard', 2)).toBeLessThan(0.245);
+  });
+
+  it('challenging every claim, or every claim that hits you, does not pay (SIM-COV-1)', () => {
+    // Measured over 20000 games: 2p 30.7% vs normal (honest 31.6%) and 13.3% vs hard (22.2%);
+    // at three players the always-challenger is eliminated almost at once.
+    for (const level of SMART) {
+      for (const players of [2, 3]) {
+        expect(rate('alwaysChallenge', level, players)).toBeLessThan(rate('honest', level, players) + 0.02);
+      }
+      expect(rate('challengeWhenHit', level, 3)).toBeLessThan(rate('honest', level, 3) + 0.02);
+    }
   });
 
   it('calling every two-card Contessa block barely pays against normal (bot-4)', () => {
@@ -195,5 +221,51 @@ describe('exploit scripts against the bots', () => {
     const hard = pooled(all, 'hard');
     expect(hard.doomedBlocksFaced).toBeGreaterThan(30);
     expect(hard.doomedBlocksPassed).toBe(0);
+  });
+});
+
+describe('challenging scripts (SIM-COV-1)', () => {
+  const trio: SeatSpec[] = [
+    { id: 'me', cards: ['duke', 'captain'], coins: 2 },
+    { id: 'a', cards: ['assassin', 'ambassador'], coins: 3 },
+    { id: 'b', cards: ['contessa', 'captain'], coins: 2 },
+  ];
+  const duel = trio.slice(0, 2);
+
+  function facing(seats: SeatSpec[], action: DeclaredAction, block?: DeclaredBlock): GameView {
+    const log = [actionEvent(action)];
+    if (block) log.push({ type: 'block', ...block, actorId: action.actorId, action: action.type });
+    return buildView({
+      me: 'me',
+      seats,
+      prompt: block ? { kind: 'respond_block' } : respondActionPrompt(action, 'me'),
+      pendingAction: action,
+      pendingBlock: block ?? null,
+      log,
+    });
+  }
+  const move = (script: ScriptId, view: GameView): Move => SCRIPTS[script](view, createRng(1));
+  const challenges = (script: ScriptId, view: GameView): boolean => move(script, view).type === 'challenge';
+
+  it('the always-challenger calls every claim it can, and only those', () => {
+    expect(challenges('alwaysChallenge', facing(trio, declared('steal', 'a', 'b')))).toBe(true);
+    expect(challenges('alwaysChallenge', facing(trio, declared('tax', 'a')))).toBe(true);
+    const faBlock = facing(trio, declared('foreign_aid', 'a'), { blockerId: 'b', character: 'duke' });
+    expect(challenges('alwaysChallenge', faBlock)).toBe(true);
+    // Foreign Aid claims nothing: the honest answer (block with the real Duke).
+    expect(move('alwaysChallenge', facing(trio, declared('foreign_aid', 'a')))).toEqual({ type: 'block', character: 'duke' });
+    const turn = buildView({ me: 'me', seats: trio, prompt: chooseActionPrompt(trio, 'me') });
+    expect(move('alwaysChallenge', turn)).toEqual({ type: 'action', action: 'tax' });
+  });
+
+  it('the challenger-when-hit calls only the claims that hit it — every claim heads-up', () => {
+    expect(challenges('challengeWhenHit', facing(trio, declared('steal', 'a', 'me')))).toBe(true);
+    expect(challenges('challengeWhenHit', facing(trio, declared('steal', 'a', 'b')))).toBe(false);
+    expect(challenges('challengeWhenHit', facing(trio, declared('tax', 'a')))).toBe(false);
+    const myStealBlocked = facing(trio, declared('steal', 'me', 'b'), { blockerId: 'b', character: 'captain' });
+    expect(challenges('challengeWhenHit', myStealBlocked)).toBe(true);
+    const othersBlocked = facing(trio, declared('steal', 'a', 'b'), { blockerId: 'b', character: 'captain' });
+    expect(challenges('challengeWhenHit', othersBlocked)).toBe(false);
+    expect(challenges('challengeWhenHit', facing(duel, declared('tax', 'a')))).toBe(true);
   });
 });

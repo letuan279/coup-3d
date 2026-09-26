@@ -7,7 +7,8 @@
  *
  * Levels are rotated through the seats (one level → homogeneous tables). `--exploits` seats one
  * scripted player (always-bluff liar, Contessa caller, steal blocker, honest never-challenger,
- * Duke-tell caller — see shared/bot/scripted.ts) against bots of one level, 2 and 3 players.
+ * Duke-tell caller, always-challenger, challenger of the claims that hit it — see
+ * shared/bot/scripted.ts) against bots of one level, 2 and 3 players.
  * Exits non-zero on any illegal move, crash, policy error or stall.
  */
 import { formatReport, ratio, scriptWinRate, simulate, simulateExploit } from '../shared/bot/simulation';

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { NAME_MAX_LENGTH, ROOM_CODE_LENGTH } from '@shared/constants';
 import { getCardFaceUrl } from '../../art/cardArt';
+import { useArtVersion } from '../../art/refresh';
 import { useT } from '../../i18n';
 import { sanitizeCode } from '../../net/links';
 import { api, clearInvite, inviteKeyFor } from '../../net/socket';
@@ -26,6 +27,7 @@ export function HomeScreen() {
   const toast = useGame((s) => s.toast);
   // Invite link (?room=CODE) captured by net/socket.ts; gone again if a rejoin link turned out dead.
   const invited = useGame((s) => s.invite?.code ?? '');
+  // A rejoin the player confirmed in RejoinPrompt is in flight.
   const autoJoining = useGame((s) => !!s.invite?.joining);
   const [code, setCode] = useState(invited);
   const [busyState, setBusy] = useState<'create' | 'join' | null>(null);
@@ -36,9 +38,11 @@ export function HomeScreen() {
   const nameRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
+  // Home is on screen when late web fonts arrive: re-read the redrawn art then (art/refresh.ts).
+  const artVersion = useArtVersion();
   const fan = useMemo(
     () => (['duke', 'assassin', 'contessa'] as const).map((c) => ({ c, src: getCardFaceUrl(c, lang) })),
-    [lang],
+    [lang, artVersion], // artVersion: the cached data URLs were redrawn
   );
 
   const validName = (): string | null => {

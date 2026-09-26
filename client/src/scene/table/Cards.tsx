@@ -6,8 +6,7 @@
  * queues.
  */
 import { memo, useMemo, useRef } from 'react';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { damp, dampAngle } from 'maath/easing';
+import { useFrame } from '@react-three/fiber';
 import { DoubleSide, MeshBasicMaterial, PlaneGeometry, type Group, type Mesh, type Vector3 } from 'three';
 import type { Character } from '@shared/types';
 import type { Lang } from '../../store/useGame';
@@ -15,9 +14,9 @@ import { CARD_H, CARD_RADIUS, CARD_W, LOCAL_CARD_RADIUS, SEAT_RADIUS, TABLE, fra
 import { cardBackMat, cardFaceMat } from '../materials';
 import { cardBackTexture } from '../textures';
 import { nowSec } from '../reactions';
-import { chooseTarget, hoverEnter, hoverLeave } from '../interaction';
+import { seatPointerHandlers } from '../interaction';
 import { REPLACE_DURATION, deckTop, easeInOut, exchangeFlights, replaceAnims } from './tableState';
-import { homePose, type Pose } from './cardPose';
+import { flipLift, homePose, settleCard, type Pose } from './cardPose';
 
 export interface CardSpec {
   key: string;
@@ -41,13 +40,11 @@ export const TableCard = memo(function TableCard({
   spec,
   lang,
   interactive,
-  targetable,
 }: {
   spec: CardSpec;
   lang: Lang;
   /** An opponent's card in game mode: hovering it highlights its owner, a click picks them. */
   interactive: boolean;
-  targetable: boolean;
 }) {
   const outer = useRef<Group>(null);
   const flipper = useRef<Group>(null);
@@ -67,7 +64,6 @@ export const TableCard = memo(function TableCard({
     const dt = Math.min(delta, 0.1);
     const home = homePose(spec, f, anim.pose);
     const faceUp = spec.isLocal || spec.revealed;
-    const targetFlip = faceUp ? 0 : Math.PI;
 
     const rep = replaceAnims.get(`${spec.playerId}:${spec.slot}`);
     if (rep) {
@@ -84,17 +80,12 @@ export const TableCard = memo(function TableCard({
     if (!anim.placed) {
       o.position.set(home.x, home.y, home.z);
       o.rotation.y = home.yaw;
-      fl.rotation.z = targetFlip;
+      fl.rotation.z = faceUp ? 0 : Math.PI;
       inn.rotation.x = -Math.PI / 2 + home.prop;
       anim.placed = true;
     } else {
-      damp(o.position, 'x', home.x, 0.22, dt);
-      damp(o.position, 'z', home.z, 0.22, dt);
-      dampAngle(o.rotation, 'y', home.yaw, 0.3, dt);
-      damp(fl.rotation, 'z', targetFlip, 0.22, dt);
-      damp(inn.rotation, 'x', -Math.PI / 2 + home.prop, 0.25, dt);
-      // Hop while flipping.
-      o.position.y = home.y + Math.sin(Math.abs(fl.rotation.z)) * 0.16;
+      // Flip with a hop; a revealed card stands up only once it has turned face up.
+      settleCard({ outer: o, flipper: fl, inner: inn }, home, faceUp, dt);
     }
     if (faceMat) {
       if (fr.material !== faceMat) fr.material = faceMat;
@@ -104,23 +95,12 @@ export const TableCard = memo(function TableCard({
     }
   });
 
-  // Always attached while interactive (like the character's hit box): if they came and went
-  // with `targetable`, R3F would never send pointer-out for a card that stops being a target
-  // under the pointer, leaving its owner highlighted. chooseTarget ignores non-targets.
-  const handlers = interactive
-    ? {
-        onClick: (e: ThreeEvent<MouseEvent>) => {
-          if (!targetable) return;
-          e.stopPropagation();
-          chooseTarget(spec.playerId);
-        },
-        onPointerOver: (e: ThreeEvent<PointerEvent>) => {
-          e.stopPropagation();
-          hoverEnter(spec.playerId);
-        },
-        onPointerOut: () => hoverLeave(spec.playerId),
-      }
-    : {};
+  // Always attached while interactive, targetable or not (like the character's hit box): if
+  // they came and went with targeting, R3F would never send pointer-out for a card that stops
+  // being a target under the pointer, leaving its owner highlighted. And the click must stop at
+  // the card whatever it targets, as the hover does — else it falls through to a neighbour's
+  // hit box behind an eliminated player's standing card (SCN-1).
+  const handlers = useMemo(() => (interactive ? seatPointerHandlers(spec.playerId) : {}), [interactive, spec.playerId]);
 
   return (
     <group ref={outer}>
@@ -154,10 +134,12 @@ function runReplace(
   o.visible = true;
   if (t < 0.4) {
     const k = easeInOut(t / 0.4);
-    o.position.set(home.x, home.y + lift * k, home.z);
     o.rotation.y = lerpAngle(home.yaw, showYaw, k);
     fl.rotation.z = fl.rotation.z * (1 - k);
-    inn.rotation.x = -Math.PI / 2 + home.prop + (SHOW_PROP - home.prop) * k;
+    const prop = home.prop + (SHOW_PROP - home.prop) * k;
+    inn.rotation.x = -Math.PI / 2 + prop;
+    // Lift at least as much as the turning card needs so its edge never dips into the felt.
+    o.position.set(home.x, home.y + Math.max(lift * k, flipLift(fl.rotation.z, prop)), home.z);
     setFront(fr, reveal);
   } else if (t < 0.8) {
     o.position.set(home.x, home.y + lift + Math.sin((t - 0.4) * 8) * 0.01, home.z);

@@ -122,8 +122,10 @@ export class RoomManager {
   }
 
   /**
-   * Join by code. While a game is running/finished this only reclaims the seat whose
-   * `req.rejoinKey` matches (see Room.join); the seat's previous token is released.
+   * Join by code. A matching `req.rejoinKey` reclaims that seat (lobby included; its previous
+   * token is released); while a game is running/finished that is the only way in (see Room.join).
+   * The new room is checked BEFORE the current one is left, so a join that cannot succeed keeps
+   * the player seated where they are — clients switch rooms with this single call.
    */
   joinRoom(token: string, code: string | null, req: JoinRequest): Result<{ code: string }> {
     const conn = this.conns.get(token);

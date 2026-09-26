@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { GameEvent } from '../types';
-import { blockHabit, buildKnowledge, holdProbability, isCertainBluff, pAtLeastOne } from './knowledge';
+import { createGame, toView } from '../engine/index';
+import { act, rig } from '../engine/testing';
+import type { GameEvent, GameState } from '../types';
+import { blockHabit, bluffEvidence, buildKnowledge, holdProbability, isCertainBluff, pAtLeastOne } from './knowledge';
 import { LEVEL_TUNING } from './personality';
 import { actionEvent, buildView, chooseActionPrompt, declared } from './test-helpers';
 import type { SeatSpec } from './test-helpers';
@@ -217,6 +219,51 @@ describe('challenge and block records', () => {
     expect(K.players.get('bot')!.hotChances).toBe(0);
   });
 
+  it('takes back the block chances of a block made moot by a caught actor (BOT-MEM-1)', () => {
+    // a bluffs an assassination of t; t calls Contessa while the action window stays open.
+    let s: GameState = createGame({
+      players: ['a', 't', 'c', 'd'].map((id, seat) => ({ id, name: id, seat })),
+      seed: 7,
+      firstPlayerId: 'a',
+    });
+    s = rig(s, {
+      hands: { a: ['duke', 'duke'], t: ['captain', 'ambassador'], c: ['captain', 'contessa'], d: ['assassin', 'duke'] },
+      coins: { a: 3, t: 2, c: 2, d: 2 },
+    });
+    s = act(s, 'a', { type: 'action', action: 'assassinate', targetId: 't' }).state;
+    s = act(s, 't', { type: 'block', character: 'contessa' }).state;
+    const record = (st: GameState) => {
+      const p = buildKnowledge(toView(st, 'd')).players.get('a')!;
+      return { chances: p.challengeChances, hot: p.hotChances, contessa: p.contessaChallengeChances };
+    };
+    const beforeWindow = s;
+
+    // c catches the Assassin bluff: the block is moot and a never gets to answer it.
+    const caught = act(beforeWindow, 'c', { type: 'challenge' }).state;
+    expect(caught.log.map((e) => e.type)).toContain('action_failed');
+    expect(caught.log.some((e) => e.type === 'action_blocked')).toBe(false);
+    expect(record(caught)).toEqual({ chances: 0, hot: 0, contessa: 0 });
+    const cc = buildKnowledge(toView(caught, 'd'));
+    expect(cc.players.get('c')!.challengeChances).toBe(1); // the Assassin claim itself
+    expect(cc.players.get('t')!.blocks).toHaveLength(1); // the block was still claimed in public
+    expect(cc.players.get('t')!.claims.map((r) => r.character)).toContain('contessa');
+
+    // Everyone passes: the block window opens and a's chances count.
+    let passed = act(beforeWindow, 'c', { type: 'pass' }).state;
+    passed = act(passed, 'd', { type: 'pass' }).state;
+    expect(passed.phase.kind).toBe('block_response');
+    expect(record(passed)).toEqual({ chances: 1, hot: 1, contessa: 1 });
+
+    // A wrong action challenge: the actor proves it, the block window opens after all.
+    const r2 = rig(beforeWindow, {
+      hands: { a: ['assassin', 'duke'], t: ['captain', 'ambassador'], c: ['captain', 'contessa'], d: ['duke', 'ambassador'] },
+    });
+    let proven = act(r2, 'c', { type: 'challenge' }).state;
+    proven = act(proven, 'c', { type: 'reveal', slot: 0 }).state;
+    expect(proven.phase.kind).toBe('block_response');
+    expect(record(proven)).toEqual({ chances: 1, hot: 1, contessa: 1 });
+  });
+
   it('spots a player who blocks everything whatever they hold (bot-1)', () => {
     const blocksAll: GameEvent[] = [
       actionEvent(declared('steal', 'b', 'a')),
@@ -237,5 +284,84 @@ describe('challenge and block records', () => {
     ]);
     expect(declined.players.get('a')!.declinedBlocks).toBe(1);
     expect(blockHabit(declined.players.get('a')!)).toBe(0);
+  });
+});
+
+describe('bluff evidence (BOT-TUNE-1)', () => {
+  const caughtTax: GameEvent[] = [
+    actionEvent(declared('tax', 'a')),
+    { type: 'challenge', challengerId: 'c', challengedId: 'a', character: 'duke', against: 'action' },
+    { type: 'challenge_result', challengerId: 'c', challengedId: 'a', character: 'duke', challengedHadCard: false },
+  ];
+  /** a blocks two kinds of action and never lets one through, then swaps its hand. */
+  const blocksEverything: GameEvent[] = [
+    actionEvent(declared('steal', 'b', 'a')),
+    { type: 'block', blockerId: 'a', character: 'captain', actorId: 'b', action: 'steal' },
+    { type: 'action_blocked', actorId: 'b', action: 'steal', blockerId: 'a', character: 'captain' },
+    actionEvent(declared('assassinate', 'c', 'a')),
+    { type: 'block', blockerId: 'a', character: 'contessa', actorId: 'c', action: 'assassinate' },
+    { type: 'action_blocked', actorId: 'c', action: 'assassinate', blockerId: 'a', character: 'contessa' },
+    actionEvent(declared('exchange', 'a')),
+    { type: 'exchange_done', playerId: 'a', returned: 2 },
+  ];
+  const evidence = (log: GameEvent[], s?: SeatSpec[]): number => bluffEvidence(knowledge(log, s).players.get('a')!);
+
+  it('stays at zero for a clean or honest record', () => {
+    expect(evidence([])).toBe(0);
+    const proven: GameEvent[] = [
+      actionEvent(declared('tax', 'a')),
+      { type: 'challenge', challengerId: 'c', challengedId: 'a', character: 'duke', against: 'action' },
+      { type: 'challenge_result', challengerId: 'c', challengedId: 'a', character: 'duke', challengedHadCard: true, slot: 0 },
+      { type: 'card_replaced', playerId: 'a', slot: 0, character: 'duke' },
+      actionEvent(declared('steal', 'a', 'c')),
+      { type: 'block', blockerId: 'a', character: 'contessa', actorId: 'b', action: 'assassinate' },
+    ];
+    expect(evidence(proven)).toBe(0);
+  });
+
+  it('grows with caught bluffs, a habit of blocking everything and more claims than cards', () => {
+    expect(evidence(caughtTax)).toBeCloseTo(0.5, 10);
+    const twice: GameEvent[] = [...caughtTax, { type: 'exchange_done', playerId: 'a', returned: 2 }, ...caughtTax];
+    expect(evidence(twice)).toBeGreaterThan(evidence(caughtTax));
+    const habit = blockHabit(knowledge(blocksEverything).players.get('a')!);
+    expect(habit).toBeGreaterThan(0);
+    expect(evidence(blocksEverything)).toBeCloseTo(habit, 10);
+    // Duke, Captain and Assassin claimed with two cards.
+    const inconsistent: GameEvent[] = [
+      actionEvent(declared('tax', 'a')),
+      actionEvent(declared('steal', 'a', 'c')),
+      actionEvent(declared('assassinate', 'a', 'c')),
+    ];
+    expect(evidence(inconsistent.slice(0, 2))).toBe(0);
+    expect(evidence(inconsistent)).toBeGreaterThan(0.3);
+  });
+
+  it("lets hard doubt a last-card claim from a player whose record shows bluffing", () => {
+    const oneCard: SeatSpec[] = [
+      { id: 'bot', cards: ['captain', 'contessa'], coins: 2 },
+      { id: 'a', cards: ['duke', 'ambassador'], revealed: [false, true], coins: 2 },
+      { id: 'b', cards: ['assassin', 'captain'], coins: 2 },
+      { id: 'c', cards: ['ambassador', 'contessa'], coins: 2 },
+    ];
+    // The same actions, let through instead of blocked: no habit (and the exchange resets the rest).
+    const letThrough: GameEvent[] = [
+      actionEvent(declared('steal', 'b', 'a')),
+      { type: 'action_resolved', actorId: 'b', action: 'steal', targetId: 'a' },
+      actionEvent(declared('assassinate', 'c', 'a')),
+      { type: 'action_resolved', actorId: 'c', action: 'assassinate', targetId: 'a' },
+      actionEvent(declared('exchange', 'a')),
+      { type: 'exchange_done', playerId: 'a', returned: 1 },
+    ];
+    const tax = actionEvent(declared('tax', 'a'));
+    const hold = (history: GameEvent[], depth = FULL): number => {
+      const K = knowledge([...history, tax], oneCard);
+      const seq = K.players.get('a')!.claims.at(-1)!.seq;
+      return holdProbability(K, 'a', 'duke', depth, { claiming: true, claimSeq: seq });
+    };
+    expect(bluffEvidence(knowledge(letThrough, oneCard).players.get('a')!)).toBe(0);
+    expect(hold(blocksEverything)).toBeLessThan(hold(letThrough) - 0.005);
+    // Levels without the full history keep reading the claim the same way.
+    const normal = LEVEL_TUNING.normal.depth;
+    expect(hold(blocksEverything, normal)).toBeCloseTo(hold(letThrough, normal), 10);
   });
 });

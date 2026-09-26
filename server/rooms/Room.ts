@@ -79,7 +79,7 @@ interface Seat {
   token: string | null;
   /**
    * Humans only: secret proving ownership of the seat (SPEC §2). Sent only in this seat's own
-   * RoomView; `room:join {code, rejoinKey}` reclaims the seat while a game is running/finished.
+   * RoomView; `room:join {code, rejoinKey}` reclaims the seat (lobby, running or finished).
    * Stable for the seat's lifetime so a saved rejoin link keeps working.
    */
   readonly rejoinKey: string | null;
@@ -179,10 +179,11 @@ export class Room {
   }
 
   /**
-   * Same token again: just re-attach. Lobby: take the lowest free seat (a rejoinKey is ignored).
-   * Game running/finished: only reclaim — the human seat whose `rejoinKey` matches, whatever its
-   * state (disconnected, still connected elsewhere → that socket is 'replaced', or left). There
-   * is deliberately no rejoin by name: anyone at the table knows the names.
+   * Same token again: just re-attach. A matching `rejoinKey` (any room state) reclaims that human
+   * seat, whatever its state (disconnected, still connected elsewhere → that socket is 'replaced',
+   * or left). Otherwise — lobby: take the lowest free seat (needs a name; a wrong key without a
+   * name → bad_rejoin_key); game running/finished: refused. There is deliberately no rejoin by
+   * name: anyone at the table knows the names.
    */
   join(token: string, conn: Connection, req: JoinRequest): Result<{ playerId: string }> {
     const plan = this.planJoin(token, req);
@@ -439,13 +440,17 @@ export class Room {
     if (this.closed) return fail('room_not_found');
     const existing = this.seats.find((s) => s.token === token);
     if (existing) return { kind: 'existing', seat: existing };
+    // A valid key reclaims its seat in every state — in the lobby too, so opening your own rejoin
+    // link between games takes your seat back instead of adding a duplicate "Name 2" seat.
+    const owned = req.rejoinKey ? this.seatByRejoinKey(req.rejoinKey) : undefined;
+    if (owned) return { kind: 'reclaim', seat: owned };
     if (this.status === 'lobby') {
+      // A key that matches no seat is only a plain join when a name came with it.
+      if (req.rejoinKey && !req.name) return fail('bad_rejoin_key');
       if (this.seats.length >= MAX_PLAYERS) return fail('room_full');
       return req.name ? { kind: 'new', name: req.name } : fail('bad_request');
     }
-    if (!req.rejoinKey) return fail('game_in_progress');
-    const seat = this.seatByRejoinKey(req.rejoinKey);
-    return seat ? { kind: 'reclaim', seat } : fail('bad_rejoin_key');
+    return fail(req.rejoinKey ? 'bad_rejoin_key' : 'game_in_progress');
   }
 
   /** Compares against every human seat (no early exit) in constant time per key. */
