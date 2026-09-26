@@ -1,0 +1,86 @@
+/* Global design tokens + layer layout. CONTRACT FILE (UI may add rules in its own CSS files). */
+:root {
+  --ink: #2b2140;
+  --ink-soft: #5a4e73;
+  --cream: #fff6e5;
+  --paper: #fffbf2;
+  --sand: #ffe7bf;
+  --coral: #ff6b5b;
+  --coral-dark: #e0473a;
+  --teal: #1fb5a8;
+  --teal-dark: #138a80;
+  --mustard: #ffc24b;
+  --mustard-dark: #e9a21f;
+  --violet: #7b61ff;
+  --sky: #8fd8ff;
+  --mint: #9be7c4;
+  --pink: #ff9ec7;
+  --danger: #f2415a;
+  --success: #35c27a;
+
+  --c-duke: #8e4fd6;
+  --c-assassin: #3b3553;
+  --c-captain: #2f86e0;
+  --c-ambassador: #2db36a;
+  --c-contessa: #e6454d;
+
+  --font-display: 'Baloo 2', 'Nunito', system-ui, sans-serif;
+  --font-body: 'Nunito', system-ui, sans-serif;
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 24px;
+  --border: 3px solid var(--ink);
+  --shadow-pop: 0 5px 0 var(--ink);
+  --shadow-soft: 0 10px 30px rgba(43, 33, 64, 0.18);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sand);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+}
+
+.app-root {
+  position: fixed;
+  inset: 0;
+}
+
+.scene-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* The HUD layer lets clicks through to the 3D canvas except on its interactive children. */
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ui-layer .interactive,
+.ui-layer button,
+.ui-layer input,
+.ui-layer select,
+.ui-layer a {
+  pointer-events: auto;
+}
