@@ -69,3 +69,30 @@ export function getCardBackUrl(): string {
   }
   return u;
 }
+
+const iconCache = new Map<Character, HTMLCanvasElement>();
+
+/** Round character emblem (128×128) — for chips on action buttons, log lines, bubbles. */
+export function getCharacterIconCanvas(character: Character): HTMLCanvasElement {
+  const hit = iconCache.get(character);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = CHARACTER_COLORS[character].main;
+  g.beginPath();
+  g.arc(64, 64, 58, 0, Math.PI * 2);
+  g.fill();
+  iconCache.set(character, c);
+  return c;
+}
+
+export function getCharacterIconUrl(character: Character): string {
+  const key = `icon:${character}`;
+  let u = urlCache.get(key);
+  if (!u) {
+    u = getCharacterIconCanvas(character).toDataURL('image/png');
+    urlCache.set(key, u);
+  }
+  return u;
+}

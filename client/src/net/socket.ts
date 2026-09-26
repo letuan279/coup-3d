@@ -99,7 +99,20 @@ export function roomCodeFromUrl(): string | null {
 
 export type ApiResult<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 
-function call<T = {}>(fn: (s: ClientSocket, ack: (r: ApiResult<T>) => void) => void): Promise<ApiResult<T>> {
+/**
+ * Dev-only: when set (see client/src/dev/mock.ts), API calls are routed here instead of the
+ * socket so screens can be previewed with fixture data and no server.
+ */
+let mockHandler: ((name: string, payload: unknown) => ApiResult<any>) | null = null;
+export function setMockHandler(fn: typeof mockHandler) {
+  mockHandler = fn;
+}
+
+function call<T = {}>(
+  fn: (s: ClientSocket, ack: (r: ApiResult<T>) => void) => void,
+  mock?: [string, unknown],
+): Promise<ApiResult<T>> {
+  if (mockHandler) return Promise.resolve(mockHandler(mock?.[0] ?? 'unknown', mock?.[1]) as ApiResult<T>);
   const s = connectSocket();
   return new Promise((resolve) => {
     let done = false;
@@ -120,25 +133,35 @@ function call<T = {}>(fn: (s: ClientSocket, ack: (r: ApiResult<T>) => void) => v
 
 export const api = {
   createRoom: (name: string, avatar?: AvatarId) =>
-    call<{ code: string }>((s, ack) => s.emit('room:create', { name, avatar }, ack as never)),
+    call<{ code: string }>((s, ack) => s.emit('room:create', { name, avatar }, ack as never), ['room:create', { name, avatar }]),
   joinRoom: (code: string, name: string, avatar?: AvatarId) =>
-    call<{ code: string }>((s, ack) => s.emit('room:join', { code: code.toUpperCase().trim(), name, avatar }, ack as never)),
-  leaveRoom: () => call((s, ack) => s.emit('room:leave', ack as never)),
-  updatePlayer: (p: { name?: string; avatar?: AvatarId }) => call((s, ack) => s.emit('player:update', p, ack as never)),
-  addBot: (level: BotLevel) => call((s, ack) => s.emit('room:addBot', { level }, ack as never)),
-  kick: (playerId: string) => call((s, ack) => s.emit('room:kick', { playerId }, ack as never)),
-  updateSettings: (p: Partial<RoomSettings>) => call((s, ack) => s.emit('room:settings', p, ack as never)),
-  start: () => call((s, ack) => s.emit('room:start', ack as never)),
-  backToLobby: () => call((s, ack) => s.emit('room:backToLobby', ack as never)),
+    call<{ code: string }>(
+      (s, ack) => s.emit('room:join', { code: code.toUpperCase().trim(), name, avatar }, ack as never),
+      ['room:join', { code, name, avatar }],
+    ),
+  leaveRoom: () => call((s, ack) => s.emit('room:leave', ack as never), ['room:leave', null]),
+  updatePlayer: (p: { name?: string; avatar?: AvatarId }) => call((s, ack) => s.emit('player:update', p, ack as never), ['player:update', p]),
+  addBot: (level: BotLevel) => call((s, ack) => s.emit('room:addBot', { level }, ack as never), ['room:addBot', { level }]),
+  kick: (playerId: string) => call((s, ack) => s.emit('room:kick', { playerId }, ack as never), ['room:kick', { playerId }]),
+  updateSettings: (p: Partial<RoomSettings>) => call((s, ack) => s.emit('room:settings', p, ack as never), ['room:settings', p]),
+  start: () => call((s, ack) => s.emit('room:start', ack as never), ['room:start', null]),
+  backToLobby: () => call((s, ack) => s.emit('room:backToLobby', ack as never), ['room:backToLobby', null]),
   /** Sends a move for the current phase. Rejections are also broadcast on the bus as 'moveRejected'. */
   async move(move: Move): Promise<ApiResult> {
     const g = useGame.getState().game;
     if (!g) return { ok: false, error: 'no_game' };
-    const res = await call((s, ack) => s.emit('game:move', { move, phaseSeq: g.phaseSeq }, ack as never));
+    const res = await call(
+      (s, ack) => s.emit('game:move', { move, phaseSeq: g.phaseSeq }, ack as never),
+      ['game:move', { move, phaseSeq: g.phaseSeq }],
+    );
     if (!res.ok) emit('moveRejected', { error: res.error });
     return res;
   },
   emote: (emote: EmoteId) => {
+    if (mockHandler) {
+      mockHandler('game:emote', { emote });
+      return;
+    }
     connectSocket().emit('game:emote', { emote });
   },
 };
