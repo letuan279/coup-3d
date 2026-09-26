@@ -1,0 +1,28 @@
+# systemd unit for the Coup 3D game server (installed by deploy/setup-vm.sh).
+[Unit]
+Description=Coup 3D game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=coup3d
+Group=coup3d
+WorkingDirectory=/opt/coup3d/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/node dist/server/index.js
+Restart=always
+RestartSec=2
+# Rooms live in memory; give sockets a moment to close cleanly on restart.
+TimeoutStopSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/coup3d
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

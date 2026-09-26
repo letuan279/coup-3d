@@ -55,6 +55,23 @@ Server phục vụ cả giao diện lẫn socket trên `PORT` (mặc định 300
 - Mất mạng/tải lại trang: mở lại trang là tự vào lại ghế (phiên được nhớ trong trình duyệt). Sau 30 giây mất kết nối, bot sẽ chơi thay cho tới khi bạn quay lại.
 - Đổi thiết bị/trình duyệt: trong menu ván đấu chọn **Sao chép link vào lại** rồi mở link đó ở thiết bị mới (link chứa khoá bí mật của ghế — đừng gửi cho người khác).
 
+## Deploy lên Google Cloud (VM)
+
+Bản đang chạy: **https://34-177-105-194.sslip.io** — VM `instance-20260916-072852` (project `hermes-agent-01-508807`, zone `asia-southeast1-b`, IP tĩnh `coup3d-ip` = 34.177.105.194). `sslip.io` là tên miền miễn phí tự trỏ về IP trong tên.
+
+Kiến trúc: Caddy (HTTPS tự động Let's Encrypt, cổng 80/443) → server Node chạy bằng systemd (`coup3d.service`, chỉ nghe `127.0.0.1:3000`). Firewall `coup3d-allow-web` chỉ mở 80/443 cho VM có tag `coup3d-web`.
+
+- Cài VM lần đầu: copy thư mục `deploy/` lên VM rồi chạy `COUP_DOMAIN=<tên-miền> bash deploy/setup-vm.sh`.
+- Deploy bản mới (build ở máy, gửi lên VM, giữ 3 bản gần nhất):
+
+```bash
+scripts/deploy.sh
+```
+
+- Xem log trên VM: `sudo journalctl -u coup3d -f`.
+- Đổi sang tên miền riêng: trỏ bản ghi A về 34.177.105.194, sửa `COUP_DOMAIN` trong `/etc/default/caddy`, rồi `sudo systemctl restart caddy`.
+- Lưu ý: phòng nằm trong bộ nhớ nên mỗi lần deploy/restart sẽ kết thúc các ván đang chơi.
+
 ## Kiểm thử
 
 ```bash

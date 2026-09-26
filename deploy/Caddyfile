@@ -1,0 +1,6 @@
+# Caddy reverse proxy: automatic HTTPS (Let's Encrypt) + WebSocket passthrough.
+# {$COUP_DOMAIN} is set in /etc/default/caddy by deploy/setup-vm.sh.
+{$COUP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
