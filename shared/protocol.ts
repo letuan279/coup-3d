@@ -32,6 +32,12 @@ export type ServerErrorCode =
 
 export interface HandshakeAuth {
   token: string;
+  /**
+   * Room code the client believes it is in (if any). When the server has no seat for the token
+   * (e.g. it restarted and lost its in-memory rooms) it answers `room:closed {reason:'room_deleted'}`
+   * so the client does not keep showing a dead room.
+   */
+  room?: string;
 }
 
 export interface ClientToServerEvents {

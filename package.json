@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Coup — online multiplayer card game in the browser with a 3D tavern table",
+  "description": "Coup \u2014 online multiplayer card game in the browser with a 3D tavern table",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch --clear-screen=false server/index.ts",
@@ -14,7 +14,8 @@
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "simulate": "tsx scripts/simulate.ts"
   },
   "engines": {
     "node": ">=20"

@@ -29,7 +29,8 @@ let socket: ClientSocket | null = null;
 export function connectSocket(): ClientSocket {
   if (socket) return socket;
   const s: ClientSocket = io({
-    auth: { token: getToken() },
+    // A function so every (re)connect sends the room we currently believe we are in.
+    auth: (cb) => cb({ token: getToken(), room: useGame.getState().room?.code }),
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 500,
