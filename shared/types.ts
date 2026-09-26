@@ -128,7 +128,18 @@ export interface GameState {
   /** Player whose turn it is. */
   actorId: string;
   pendingAction: DeclaredAction | null;
+  /**
+   * The declared block. Set as soon as the block is declared — possibly while the
+   * action_response window is still open for the OTHER players to challenge the action itself
+   * (see SPEC §1.1 "block while others may still challenge the action").
+   */
   pendingBlock: DeclaredBlock | null;
+  /**
+   * Private knowledge: for each player, the characters they returned to the court deck with
+   * their last Exchange that are provably still in the deck (cleared for everyone as soon as
+   * anyone draws from the deck again). Optional for backwards compatibility.
+   */
+  knownInDeck?: Record<string, Character[]>;
   phase: Phase;
   /** Incremented on EVERY phase change (including a new response window). Clients echo it with moves to avoid stale input. */
   phaseSeq: number;
@@ -287,7 +298,14 @@ export interface GameView {
   turn: number;
   actorId: string;
   pendingAction: DeclaredAction | null;
+  /**
+   * Non-null during block_response, and ALSO during action_response when the target has already
+   * blocked but other players may still challenge the action's claim (the target is then in
+   * `passed`). UI: show "X blocked — waiting for others to challenge the action or allow".
+   */
   pendingBlock: DeclaredBlock | null;
+  /** Viewer-only: characters the viewer knows are in the court deck (returned by their own Exchange, until the next draw). */
+  knownInDeck?: Character[];
   phase: PhaseView;
   phaseSeq: number;
   prompt: Prompt | null;
@@ -346,6 +364,12 @@ export interface RoomView {
   settings: RoomSettings;
   /** The receiving client's own player id. */
   youId: string;
+  /**
+   * Secret for the receiving player's own (human) seat. Lets them reclaim the seat from another
+   * device/browser with `room:join {code, rejoinKey}` (share link: `/?room=CODE&key=KEY`). Never
+   * sent to anyone else.
+   */
+  rejoinKey?: string;
   maxPlayers: number;
   /** Increments each time a game starts. */
   gameNumber: number;

@@ -11,7 +11,11 @@ import { create } from 'zustand';
 import type { ActionType, AvatarId, GameView, RoomView } from '@shared/types';
 import { AVATARS } from '@shared/types';
 
-export type ConnStatus = 'connecting' | 'connected' | 'reconnecting';
+/**
+ * - replaced: the server closed this socket because the same session was opened in another tab
+ *   (no auto-reconnect; the UI offers "play in this tab", which reconnects explicitly).
+ */
+export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'replaced';
 export type Lang = 'vi' | 'en';
 export type ToastTone = 'info' | 'error' | 'success';
 

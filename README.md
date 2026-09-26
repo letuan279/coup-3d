@@ -11,7 +11,7 @@ phong cách quán rượu đầy nắng — lấy cảm hứng từ *Liar's Bar*
 
 ## Chạy thử
 
-Yêu cầu Node.js ≥ 20.
+Yêu cầu Node.js ≥ 22.12 (có sẵn `.nvmrc`).
 
 ```bash
 npm install
@@ -34,6 +34,26 @@ npm start
 ```
 
 Server phục vụ cả giao diện lẫn socket trên `PORT` (mặc định 3000): http://localhost:3000
+
+## Chơi với bạn bè
+
+`localhost` chỉ dùng được trên chính máy của bạn — link mời phải trỏ tới địa chỉ mà bạn bè truy cập được.
+
+**Cùng mạng LAN / Wi-Fi**
+
+1. Chạy bản production (`npm run build`, rồi `npm start`) — server lắng nghe trên mọi địa chỉ mạng của máy, cổng `PORT` (mặc định 3000).
+2. Xem IP nội bộ của máy (macOS: `ipconfig getifaddr en0`, Windows: `ipconfig`), ví dụ `192.168.1.23`.
+3. Mở `http://192.168.1.23:3000` trên máy bạn, tạo phòng và bấm **Sao chép link mời** — link sẽ dùng đúng địa chỉ đó. Nếu tường lửa hỏi, cho phép Node nhận kết nối.
+
+**Qua Internet**
+
+- Nhanh nhất: mở đường hầm tới cổng 3000, ví dụ `cloudflared tunnel --url http://localhost:3000` hoặc `ngrok http 3000`, rồi mở địa chỉ https mà công cụ cấp và gửi link mời từ đó.
+- Lâu dài: deploy lên bất kỳ dịch vụ chạy Node (Render, Railway, Fly.io, VPS…): lệnh build `npm ci && npm run build`, lệnh chạy `npm start`, đặt biến `PORT` nếu dịch vụ yêu cầu. Server giữ phòng trong bộ nhớ nên chỉ chạy **một** instance.
+
+**Vào lại ván**
+
+- Mất mạng/tải lại trang: mở lại trang là tự vào lại ghế (phiên được nhớ trong trình duyệt). Sau 30 giây mất kết nối, bot sẽ chơi thay cho tới khi bạn quay lại.
+- Đổi thiết bị/trình duyệt: trong menu ván đấu chọn **Sao chép link vào lại** rồi mở link đó ở thiết bị mới (link chứa khoá bí mật của ghế — đừng gửi cho người khác).
 
 ## Kiểm thử
 

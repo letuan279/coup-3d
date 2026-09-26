@@ -80,9 +80,19 @@ action_response (responders = all other living players; each may pass / challeng
   challenge by C:
      actor has claim    → card_replaced(actor); lose_influence(C, wrong_challenge, then after_action_proven)
      actor bluffed      → refund cost (assassinate); lose_influence(actor, caught_bluffing, then end_turn); action_failed
-  block by B (char X)   → block_response{responders = all living except B}
+  block by B (char X)   → record pendingBlock; B counts as responded.
+     if the action is challengeable (steal / assassinate) AND other responders have not all passed yet:
+                          the SAME action_response window stays open (same phaseSeq, same deadline) for the
+                          remaining responders to challenge the ACTION's claim or pass (they can't block).
+                          Rationale (official rules): once an action is declared, the other players must get
+                          the chance to challenge it — a fast block must not cut that off.
+     otherwise / once all remaining responders passed → block_response{responders = all living except B}
+  challenge of the action while a block is pending:
+     actor bluffed      → as above (action fails; the block is moot and discarded)
+     actor has claim    → challenger loses; then straight to block_response for the recorded block
 
-after_action_proven: if action blockable (target-only) AND target alive AND actor alive
+after_action_proven: if a block is already pending → block_response
+                     elif action blockable (target-only) AND target alive AND actor alive
                        → action_response{responders:[target], canChallenge:false, blockers:[target]}
                      else resolve_action
    (the target gets a block window even if they had passed before the challenge)
@@ -120,10 +130,10 @@ Views never include other players' hidden characters, deck order, card ids, or a
 - **Identity**: `socket.handshake.auth.token` (random secret from localStorage). A token maps to at most one (room, playerId). A second socket with the same token replaces the first (old gets `room:closed {reason:'replaced'}` and is disconnected). On connection, if the token belongs to a room, the socket is re-attached, and `room:state` (+ `game:state` with `resync:true`) is pushed.
 - **Rooms**: in-memory `Map<code, Room>`. Code: 5 chars from `ROOM_CODE_ALPHABET`, case-insensitive join. Max 6 seats. Seats are numbered 0..5; a joiner takes the lowest free seat. Names trimmed, 1..16 chars, unique within a room (append " 2", " 3"… if taken). Avatar: requested if free else first free.
 - **Host**: creator. Host-only: add bot (level easy/normal/hard, auto name + free avatar), kick, settings (turnSeconds ∈ TURN_SECONDS_OPTIONS, responseSeconds ∈ RESPONSE_SECONDS_OPTIONS), start (2–6 seated), back to lobby after game over. If the host leaves or is removed, host passes to the next connected human (lowest seat), else any human.
-- **Lobby disconnect**: seat kept `LOBBY_DISCONNECT_REMOVE_MS`, then removed. Room deleted after `EMPTY_ROOM_DELETE_MS` with no connected humans (and immediately if no humans at all).
+- **Lobby disconnect**: seat kept `LOBBY_DISCONNECT_REMOVE_MS`, then removed (the returning client gets `room:closed {reason:'expired'}`). Room deleted after `EMPTY_ROOM_DELETE_MS` with no connected humans (and immediately if no humans at all).
 - **Game start**: engine `createGame` with seats in seat order and a random seed; status `playing`.
 - **Game disconnect**: seat stays; its decisions time out with default moves; after `RECONNECT_GRACE_MS` the seat becomes `botControlled` and a normal-level bot plays it. Reconnecting (same token) restores control immediately (`botControlled=false`), and the player receives a full resync. `room:leave` mid-game → seat is `left` + `botControlled` for the rest of the game; the socket leaves the room.
-- **Rejoin by name**: `room:join` on a running game succeeds only if a disconnected (or left) human seat has the same name (case-insensitive) — the new token takes over that seat.
+- **Rejoin from another device**: every human seat has a secret `rejoinKey` (random, ≥ 64 bits), sent only to that seat's own client in `RoomView.rejoinKey`. The in-game menu offers "copy rejoin link" (`/?room=CODE&key=KEY`). `room:join {code, rejoinKey}` on a running/finished game reclaims that seat (the new token takes it over; any socket holding it gets `room:closed 'replaced'`; a left seat becomes human-controlled again). Without a key → `game_in_progress`; wrong key → `bad_rejoin_key`. There is NO rejoin by name (it allowed hijacking seats).
 - **Timers**: whenever `phaseSeq` changes, set `deadline = now + duration`, where duration = turn: turnSeconds, action/block response: responseSeconds, lose_influence: LOSE_INFLUENCE_SECONDS, exchange: turnSeconds. On expiry, apply `getDefaultMove(..., {auto:true})` for every current decider (stop if phaseSeq changes midway).
 - **Bots**: after every state change, for each decider that is a bot or botControlled, schedule `decideBotMove(toView(state, id), {level, rand})` after a random think delay in `BOT_THINK_MS[level]` (never earlier than `MIN_PHASE_SETTLE_MS` after the phase began, never later than deadline−300ms). Re-check `phaseSeq` before applying. A bot error falls back to `getDefaultMove`. Bot personality flavour: they may send emotes occasionally (e.g. `liar` after catching a bluff, `gg` on winning) — rate limited.
 - **Broadcast**: after each change, each connected human gets `game:state {view: toView(state, id, {logLimit: CLIENT_LOG_LIMIT}) + deadline/phaseDurationMs/serverNow, events: new log entries since the last push to that socket, resync:false}`. Room changes → `room:state` to each member (with their own `youId`).

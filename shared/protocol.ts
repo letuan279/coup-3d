@@ -28,7 +28,9 @@ export type ServerErrorCode =
   | 'not_in_room'
   | 'not_enough_players'
   | 'name_taken'
-  | 'rate_limited';
+  | 'rate_limited'
+  /** room:join with a rejoinKey that matches no human seat of that room. */
+  | 'bad_rejoin_key';
 
 export interface HandshakeAuth {
   token: string;
@@ -43,10 +45,17 @@ export interface HandshakeAuth {
 export interface ClientToServerEvents {
   'room:create': (p: { name: string; avatar?: AvatarId }, ack: Ack<{ code: string }>) => void;
   /**
-   * Join by code. If a game is running, joining is only allowed to reclaim a disconnected/left
-   * human seat with the same name (case-insensitive); otherwise `game_in_progress`.
+   * Join by code. While a game is running (or finished, before the host returns to the lobby)
+   * joining is only possible to reclaim your own human seat with its `rejoinKey` (from
+   * RoomView.rejoinKey — proof of ownership); otherwise `game_in_progress`. A wrong key →
+   * `bad_rejoin_key`. With a valid key the seat is taken over by this socket (any other socket
+   * holding it gets room:closed 'replaced'); a seat that had been left becomes human-controlled
+   * again. `name` is ignored when reclaiming. In the lobby a rejoinKey is ignored.
    */
-  'room:join': (p: { code: string; name: string; avatar?: AvatarId }, ack: Ack<{ code: string }>) => void;
+  'room:join': (
+    p: { code: string; name: string; avatar?: AvatarId; rejoinKey?: string },
+    ack: Ack<{ code: string }>,
+  ) => void;
   /** Leave the room. Mid-game, the seat becomes permanently bot-controlled for the rest of the game. */
   'room:leave': (ack?: Ack) => void;
   /** Lobby only. */
@@ -69,7 +78,13 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   'room:state': (room: RoomView) => void;
   /** Sent when the client is no longer in a room (kicked, left, room closed). */
-  'room:closed': (p: { reason: 'kicked' | 'left' | 'room_deleted' | 'replaced' }) => void;
+  /**
+   * - kicked: removed by the host · left: you left (no toast) · room_deleted: room gone (also
+   *   sent on connect when the claimed room is unknown, e.g. after a server restart) ·
+   *   replaced: another socket took this session/seat · expired: removed from the lobby after
+   *   being disconnected longer than LOBBY_DISCONNECT_REMOVE_MS.
+   */
+  'room:closed': (p: { reason: 'kicked' | 'left' | 'room_deleted' | 'replaced' | 'expired' }) => void;
   /**
    * Personalised game view. `events` = log entries created since the previous push to this
    * client (for animations); empty on a full resync (e.g. after reconnect).
