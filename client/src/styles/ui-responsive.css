@@ -20,7 +20,7 @@
   /* Keyboard shortcuts mean nothing without a keyboard. */
   .act-btn__key,
   .kbd-badge,
-  .rules-keys {
+  .rules-keys-section {
     display: none;
   }
 
@@ -42,6 +42,17 @@
   .act-tip {
     display: none;
   }
+}
+
+/* No pull-to-refresh / scroll chaining over the table; no image callout on a long press. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+.ui-root img,
+.sc-root img {
+  -webkit-touch-callout: none;
 }
 
 /* Mobile browser bars: size against the visible viewport. */
@@ -210,7 +221,7 @@
 }
 
 :root[data-hud='scaled'] .phase-banner {
-  max-width: calc((100vw - 600px * var(--hud-scale)) / var(--hud-scale));
+  max-width: calc((100vw - 700px * var(--hud-scale)) / var(--hud-scale));
 }
 
 :root[data-hud='scaled'] .log-panel {
@@ -221,6 +232,11 @@
 
 :root[data-hud='scaled'] .log-tab {
   top: calc(68px * var(--hud-scale));
+}
+
+/* The emote button sits above the dock's left end (the scaled dock nearly spans the screen). */
+:root[data-hud='scaled'] .emote-dock {
+  bottom: calc((var(--dock-h) + 36px) * var(--hud-scale));
 }
 
 :root[data-hud='scaled'] .over-mini {
@@ -260,9 +276,15 @@
   top: 6px;
   width: 480px;
   min-width: 0;
-  max-width: calc((100vw - 470px * var(--hud-scale)) / var(--hud-scale));
+  max-width: calc((100vw - 520px * var(--hud-scale)) / var(--hud-scale));
   padding: 6px 12px 7px 8px;
   gap: 4px;
+}
+
+/* Sideways phones have no height to spare: a one-line headline. */
+:root[data-hud='short'] .phase-banner__main {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 :root[data-hud='short'] .phase-banner__timer {
@@ -309,7 +331,7 @@
   height: 30px;
 }
 
-:root[data-hud='short'] .act-btn__glyph .icon {
+:root[data-hud='short'] .act-btn__glyph :is(.icon, .coin-icon) {
   width: 26px;
   height: 26px;
 }
@@ -351,7 +373,7 @@
 
 :root[data-hud='short'] .log-panel {
   top: calc(56px * var(--hud-scale)); /* below the top bar */
-  bottom: 8px;
+  bottom: calc((var(--dock-h) + 20px) * var(--hud-scale)); /* above the dock: its buttons stay usable */
   right: max(8px, env(safe-area-inset-right));
   width: min(320px, 60vw);
 }
@@ -369,7 +391,7 @@
 }
 
 /* ───────────────────────── Game: phone held upright ─────────────────────────
-   Top bar (8–48px) · phase banner (56–~130px) · table · dock (bottom 292px, sync: PORTRAIT_HUD). */
+   Top bar (8–48px) · phase banner (56–~146px) · table · dock (bottom 292px, sync: PORTRAIT_HUD). */
 :root[data-hud='portrait'] .game-hud {
   --dock-h: 276px;
   --pad: 8px;
@@ -440,7 +462,7 @@
 }
 
 :root[data-hud='portrait'] .log-panel {
-  top: 138px;
+  top: 148px; /* sync: PORTRAIT_HUD.top */
   left: var(--pad);
   right: var(--pad);
   bottom: calc(var(--dock-h) + 16px);
@@ -521,7 +543,7 @@
   border-width: 2px;
 }
 
-:root[data-hud='portrait'] .act-btn__glyph .icon {
+:root[data-hud='portrait'] .act-btn__glyph :is(.icon, .coin-icon) {
   width: 22px;
   height: 22px;
 }
@@ -570,7 +592,8 @@
   gap: 8px;
 }
 
-:root[data-hud='portrait'] .response-panel__buttons .resp-btn {
+:root[data-hud='portrait'] .response-panel__buttons .resp-btn,
+:root[data-hud='portrait'] .response-panel__buttons .resp-btn:first-child:nth-last-child(2) ~ .resp-btn {
   flex: 1 1 calc(50% - 4px);
   min-width: 0;
   height: 46px;
@@ -637,7 +660,7 @@
 }
 
 :root[data-hud='portrait'] .ui-root--game .toasts {
-  top: 140px;
+  top: 150px;
   width: calc(100vw - 16px);
 }
 
@@ -704,19 +727,61 @@
   .over-portrait {
     width: 104px;
     height: 104px;
+    grid-template: 100% / 100%;
+  }
+
+  /* The avatar renders at 132px: shrink it to the smaller portrait box. */
+  .over-portrait__avatar {
+    scale: 0.79;
   }
 
   .over-title {
     font-size: 32px;
   }
 
-  .rules-scroll {
-    overflow-x: auto;
+  /* The reference table reflows into one card per action: name + claim, effect, blockers. */
+  .rules-table,
+  .rules-table tbody {
+    display: block;
   }
 
-  /* Keep the reference table readable: scroll it sideways rather than crushing the columns. */
-  .rules-table {
-    min-width: 600px;
+  .rules-table thead {
+    display: none;
+  }
+
+  .rules-table tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 2px 10px;
+    padding: 7px 10px;
+    border-top: 2px solid var(--ink-10);
+  }
+
+  .rules-table tr:first-child {
+    border-top: none;
+  }
+
+  .rules-table tr:nth-child(even) {
+    background: rgba(255, 231, 191, 0.45);
+  }
+
+  .rules-table td,
+  .rules-table tr:nth-child(even) td {
+    padding: 0;
+    border: none;
+    background: none;
+  }
+
+  .rules-table :is(.rules-effect, .rules-block) {
+    grid-column: 1 / -1;
+  }
+
+  .rules-block::before {
+    content: attr(data-label) ': ';
+    margin-right: 4px;
+    font-weight: 800;
+    color: var(--ink-soft);
   }
 
   .rules-chars {
@@ -739,7 +804,22 @@
   }
 
   .over-portrait__avatar {
-    scale: 0.6;
+    scale: 0.55;
+  }
+
+  /* Keep the leaderboard whole and let the backdrop scroll instead of squeezing it. */
+  .over-backdrop {
+    overflow-y: auto;
+    place-items: start center;
+  }
+
+  .over-card {
+    max-height: none;
+    margin-block: auto;
+  }
+
+  .over-tally {
+    flex: none;
   }
 }
 
@@ -765,6 +845,41 @@
 
 :root[data-hud='short'] :is(.sc-plate, .sc-bubble) {
   zoom: 0.85;
+}
+
+/* Phones: compact plates (icon-only bot badge, tighter padding), and every other plate one row
+   higher so neighbours never overlap however close the seats project (sync: PHONE_PLATE_RAISE). */
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-plate {
+  gap: 4px;
+  padding: 3px 7px 3px 4px;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-plate__name {
+  max-width: 96px;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-badge__txt {
+  display: none;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-badge--bot {
+  padding: 1px 3px;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-seat.is-raised .sc-plate-pos {
+  bottom: calc(var(--u) * 0.44px + 38px);
+}
+
+/* The offline "zzz" floats above the plate instead of over its card pips. */
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-zzz {
+  z-index: 3;
+  left: auto;
+  right: calc(var(--u) * -0.1px);
+  bottom: calc(var(--u) * 0.44px + 30px);
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .sc-seat.is-raised .sc-zzz {
+  bottom: calc(var(--u) * 0.44px + 68px);
 }
 
 /* Sideways phones: the emote button sits above the dock's left end. */
@@ -809,7 +924,7 @@
 /* Exchange: up to four cards in one row. */
 @media (max-width: 560px) {
   .exchange-modal {
-    --card-w: 66px;
+    --card-w: min(80px, calc((100vw - 76px) / 4 - 6px));
   }
 
   .exchange-modal .pick-card {
@@ -818,7 +933,32 @@
 
   .exchange-modal .decision-cards {
     flex-wrap: nowrap;
+    justify-content: center;
     gap: 4px;
+  }
+
+  /* The "current" / "drawn" tags must not be wider than their card. */
+  .exchange-modal .pick-card__tag {
+    white-space: nowrap;
+    font-size: 10px;
+    letter-spacing: 0;
+    padding-inline: 4px;
+  }
+
+  .exchange-foot {
+    gap: 10px;
+  }
+
+  .exchange-foot > .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-inline: 12px;
+    font-size: 18px;
+  }
+
+  .exchange-count {
+    flex: none;
+    font-size: 16px;
   }
 }
 
@@ -848,4 +988,52 @@
   width: 100%;
   max-width: 560px;
   margin-inline: auto;
+}
+
+/* Narrow phones: the card art already names the character — drop the labels so the hand row fits. */
+@media (max-width: 380px) {
+  :root[data-hud='portrait'] .hand__label {
+    display: none;
+  }
+
+  :root[data-hud='portrait'] .hand {
+    gap: 10px;
+  }
+}
+
+/* Phones: block buttons may wrap the character name onto a second line rather than cut it. */
+:root:is([data-hud='portrait'], [data-hud='short']) .resp-btn--block {
+  height: auto;
+  min-height: 46px;
+  gap: 6px;
+  padding: 5px 8px 4px 6px;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .resp-btn__stack span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  font-size: 14.5px;
+  line-height: 1.1;
+}
+
+:root:is([data-hud='portrait'], [data-hud='short']) .resp-btn__emblem {
+  width: 22px;
+  height: 22px;
+}
+
+/* Portrait: the BLUFF tag stays readable and clear of the emblem. */
+:root[data-hud='portrait'] .act-btn__bluff {
+  top: -7px;
+  right: 2px;
+  font-size: 9.5px;
+}
+
+/* Large screens: the 1.12 modal scale must not push tall modals (rules) past the screen. */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .modal {
+    max-height: calc((100dvh - 24px) / 1.12);
+  }
 }

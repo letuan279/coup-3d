@@ -148,6 +148,9 @@ export function HomeScreen() {
                 onChange={(e) => setCode(sanitizeCode(e.target.value))}
                 aria-label={t('home.codePlaceholder')}
                 autoComplete="off"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                enterKeyHint="go"
                 spellCheck={false}
               />
               <button type="submit" className={`btn btn-lg ${invited ? 'btn-coral' : 'btn-teal'}`} disabled={busy !== null}>

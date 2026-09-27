@@ -9,6 +9,7 @@ import { Icon } from '../common/Icon';
 import { useHud } from '../hudStore';
 import { pickTarget } from '../moves';
 import { claimHover, releaseHover } from './hoverOwner';
+import { isTouchOnly } from '../responsive';
 
 /** Targeting mode: pick the victim of a coup / assassination / steal (Esc cancels). */
 export const TargetPicker = memo(function TargetPicker() {
@@ -38,7 +39,7 @@ export const TargetPicker = memo(function TargetPicker() {
           <TargetButton key={p.id} p={p} action={action} hotkey={i + 1} />
         ))}
       </div>
-      <p className="target-picker__hint">{t('target.hint')}</p>
+      <p className="target-picker__hint">{t(isTouchOnly() ? 'target.hintTouch' : 'target.hint')}</p>
     </div>
   );
 });

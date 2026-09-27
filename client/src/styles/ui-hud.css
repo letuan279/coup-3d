@@ -180,7 +180,7 @@ button.chip .icon {
   translate: -50% 0;
   z-index: var(--z-hud);
   width: 540px;
-  max-width: calc(100vw - 600px);
+  max-width: calc(100vw - 700px); /* clear of the top-left and top-right clusters */
   min-width: 380px;
   padding: 8px 14px 9px 10px;
   display: flex;
@@ -228,6 +228,12 @@ button.chip .icon {
 
 .phase-banner__main {
   font: 800 17px/1.3 var(--font-display);
+  /* A long headline must not grow the banner over the table (the log has the full text). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .phase-banner__main .char-chip {
@@ -238,6 +244,9 @@ button.chip .icon {
   font: 700 13px/1.3 var(--font-body);
   color: var(--ink-soft);
   min-height: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .phase-banner__call {

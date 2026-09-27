@@ -23,6 +23,9 @@ import { useResponsiveAttributes } from './responsive';
 
 type Screen = 'home' | 'lobby' | 'game' | 'dealing';
 
+/** A rotated tablet / narrowed window turns the log panel into a drawer over the table: close it. */
+const closeLog = () => useGame.getState().setShowLog(false);
+
 function DealingNotice() {
   const t = useT();
   return (
@@ -38,7 +41,7 @@ function DealingNotice() {
 export function UIRoot() {
   const lang = useGame((s) => s.ui.lang);
   useEffect(() => applyDocumentLang(lang), [lang]);
-  useResponsiveAttributes();
+  useResponsiveAttributes(closeLog);
 
   const screen = useGame((s): Screen => {
     if (!s.room) return 'home';

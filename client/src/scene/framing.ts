@@ -4,7 +4,7 @@
  * Pure three.js math — safe to run in tests (no WebGL).
  */
 import { Matrix4, Vector3 } from 'three';
-import { LOBBY_PORTRAIT_STRIP, LOBBY_SIDE_W, PORTRAIT_HUD, SHORT_DOCK_H, hudLayout, lobbyLayout } from '../ui/responsive';
+import { LOBBY_PORTRAIT_STRIP, LOBBY_SIDE_W, PHONE_PLATE_RAISE, PORTRAIT_HUD, SHORT_DOCK_H, hudLayout, lobbyLayout } from '../ui/responsive';
 import { CARD_RADIUS, HEAD_Y, LOCAL_CARD_RADIUS, PLATE_Y, TABLE, frameAt, seatCamera, slotAngle } from './layout';
 
 export interface Insets {
@@ -98,9 +98,13 @@ export function gameInsets(showLog: boolean, width: number, height = 900): Inset
   const hud = hudLayout(width, height);
   if (hud.mode === 'portrait') return { top: PORTRAIT_HUD.top, right: 0, bottom: PORTRAIT_HUD.dock, left: 0 };
   const s = hud.scale;
-  // The phase banner takes the top centre; the table is framed below it.
-  if (hud.mode === 'short') return { top: 92 * s, right: 0, bottom: (SHORT_DOCK_H + 20) * s, left: 0 };
-  const right = showLog && !hud.logOverlay ? Math.min(320 * s, width * 0.25) : 0;
+  // The phase banner takes the top centre; the table is framed below it and below the raised plate row
+  // (a plate with a countdown ring stands ~14px above its framed point).
+  if (hud.mode === 'short') return { top: 92 * s + PHONE_PLATE_RAISE + 14, right: 0, bottom: (SHORT_DOCK_H + 20) * s, left: 0 };
+  // The log panel beside the table: 12px from the edge, var(--log-w) wide (scaled: max(240px, 300px × s),
+  // 320px on large screens — see ui-hud.css / ui-responsive.css), plus a gap for the nearest plate.
+  const logW = hud.mode === 'desktop' ? (width >= 1600 && height >= 900 ? 320 : 300) : Math.max(240, 300 * s);
+  const right = showLog && !hud.logOverlay ? 12 + logW + 12 : 0;
   return { top: 64 * s, right, bottom: 230 * s, left: 0 };
 }
 
@@ -109,9 +113,11 @@ export function gameMargin(width: number, height: number): number {
   return hudLayout(width, height).mode === 'portrait' ? 0.15 : 0.05;
 }
 
-/** FOV range for the game camera: a phone held upright needs a much taller view to fit the table's width. */
+/** FOV range for the game camera: a phone needs a much taller view to fit the table into the space the HUD leaves. */
 export function gameFovRange(width: number, height: number): [number, number] {
-  return width < height ? [34, 125] : [34, 72];
+  if (width < height) return [34, 125];
+  // A phone held sideways has little height between the banner / plate row and the dock.
+  return hudLayout(width, height).mode === 'short' ? [34, 86] : [34, 72];
 }
 
 /**

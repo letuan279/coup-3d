@@ -174,6 +174,7 @@ export const ui: DictPair = {
     // ── targeting ──
     'target.title': '{action}: chọn mục tiêu',
     'target.hint': 'Bấm vào nhân vật trên bàn hoặc chọn bên dưới (phím số).',
+    'target.hintTouch': 'Chạm vào nhân vật trên bàn hoặc chọn bên dưới.',
     'target.cards': 'Còn {n} lá úp',
     'target.hiddenCard': 'Lá úp',
     'target.lostCard': 'Đã lật: {char}',
@@ -473,6 +474,7 @@ export const ui: DictPair = {
 
     'target.title': '{action}: pick a target',
     'target.hint': 'Click a character at the table or pick below (number keys).',
+    'target.hintTouch': 'Tap a character at the table or pick below.',
     'target.cards': 'Face-down cards: {n}',
     'target.hiddenCard': 'Face-down card',
     'target.lostCard': 'Revealed: {char}',
