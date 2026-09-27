@@ -27,6 +27,8 @@ export interface CharacterProps {
   isWinner: boolean;
   wins: number;
   showPlate: boolean;
+  /** Nameplate sits a row higher on narrow screens, so neighbouring plates do not overlap. */
+  raised?: boolean;
 }
 
 const hitGeo = new BoxGeometry(...HIT_BOX_SIZE);
@@ -35,7 +37,7 @@ const ringGeo = new PlaneGeometry(0.95, 0.95);
 const RING_Z = SEAT_RADIUS - CARD_RADIUS;
 
 export const Character = memo(function Character(props: CharacterProps) {
-  const { seat, angle, mode, deciding, isActor, isWinner, wins, showPlate } = props;
+  const { seat, angle, mode, deciding, isActor, isWinner, wins, showPlate, raised = false } = props;
   const id = seat.id;
   const parts = animalParts(seat.avatar, seat.eliminated);
   const sp = parts.species;
@@ -145,6 +147,7 @@ export const Character = memo(function Character(props: CharacterProps) {
             isActor={isActor}
             isWinner={isWinner}
             wins={wins}
+            raised={raised}
             anchorRef={labelRefs.anchor}
             ringRef={labelRefs.ring}
             secRef={labelRefs.sec}

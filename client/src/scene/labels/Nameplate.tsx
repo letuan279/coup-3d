@@ -21,6 +21,8 @@ export interface NameplateProps {
   isActor: boolean;
   isWinner: boolean;
   wins: number;
+  /** Every other plate sits a row higher on phones (CSS), so neighbouring plates do not overlap. */
+  raised?: boolean;
   /** Anchor element (at the head centre); the character sets `--u` (px per metre) and the bubble side on it. */
   anchorRef: RefObject<HTMLDivElement | null>;
   ringRef: RefObject<SVGCircleElement | null>;
@@ -32,7 +34,7 @@ export interface NameplateProps {
 
 export const Nameplate = memo(function Nameplate(p: NameplateProps) {
   return (
-    <div ref={p.anchorRef} className="sc-seat">
+    <div ref={p.anchorRef} className={p.raised ? 'sc-seat is-raised' : 'sc-seat'}>
       <div className="sc-bubble-pos">
         <SpeechBubble playerId={p.seat.id} />
       </div>
@@ -106,7 +108,9 @@ function PlateCard(p: NameplateProps) {
           {seat.botBadge && (
             <span className="sc-badge sc-badge--bot" title={seat.botControlled ? t('common.botPlaying') : t('common.bot')}>
               <RobotIcon />
-              {seat.botControlled ? t('common.botPlaying') : seat.botLevel ? t(`botLevel.${seat.botLevel}`) : t('common.bot')}
+              <span className="sc-badge__txt">
+                {seat.botControlled ? t('common.botPlaying') : seat.botLevel ? t(`botLevel.${seat.botLevel}`) : t('common.bot')}
+              </span>
             </span>
           )}
           {seat.offline && (

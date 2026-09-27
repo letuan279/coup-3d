@@ -15,7 +15,7 @@
  * Lobby: desktop (panels either side of the table), side (one scrolling column on the right,
  * table on the left) or portrait (table strip on top, scrolling column below).
  */
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 export type HudMode = 'desktop' | 'scaled' | 'short' | 'portrait';
 export type LobbyMode = 'desktop' | 'side' | 'portrait';
@@ -46,11 +46,14 @@ const MIN_SCALE = 0.5;
 
 /** Portrait-mode HUD metrics (px) — keep in sync with the `[data-hud='portrait']` CSS. */
 export const PORTRAIT_HUD = {
-  /** Top bar + phase banner. */
-  top: 138,
+  /** Top bar + phase banner (headline clamped to two lines). */
+  top: 148,
   /** Dock height (hand row + command area), bottom gap included. */
   dock: 292,
 } as const;
+
+/** Phones (portrait / short): every other name plate sits this many px higher — keep in sync with the CSS. */
+export const PHONE_PLATE_RAISE = 38;
 
 /** Lobby side column width (px) — keep in sync with `[data-lobby='side']` CSS. */
 export const LOBBY_SIDE_W = 420;
@@ -75,7 +78,8 @@ export function hudLayout(width: number, height: number): HudLayout {
 
 export function lobbyLayout(width: number, height: number): LobbyMode {
   if (isPortrait(width, height)) return 'portrait';
-  return width >= 1180 && height >= 600 ? 'desktop' : 'side';
+  // The desktop lobby's side panels need ~740px of height (seat list + start button).
+  return width >= 1180 && height >= 740 ? 'desktop' : 'side';
 }
 
 /** Current window size (the canvas and the HUD both fill the window). */
@@ -93,14 +97,17 @@ export function logStartsClosed(): boolean {
 /**
  * Mirrors the layout modes onto <html> as `data-hud` / `data-lobby` / `data-log` and the
  * `--hud-scale` custom property, so the stylesheets (HUD and in-world labels alike) can switch
- * layouts without JS re-renders.
+ * layouts without JS re-renders. Runs before the first paint, so a phone never flashes the desktop
+ * HUD. `onLogBecomesOverlay` fires when a resize or rotation turns the log panel into a drawer over
+ * the table (so an open log can be closed).
  */
-export function useResponsiveAttributes(): void {
-  useEffect(() => {
+export function useResponsiveAttributes(onLogBecomesOverlay?: () => void): void {
+  useLayoutEffect(() => {
     const el = document.documentElement;
     const apply = () => {
       const { width, height } = viewport();
       const hud = hudLayout(width, height);
+      if (el.dataset.log === 'panel' && hud.logOverlay) onLogBecomesOverlay?.();
       el.dataset.hud = hud.mode;
       el.dataset.lobby = lobbyLayout(width, height);
       el.dataset.log = hud.logOverlay ? 'overlay' : 'panel';
@@ -113,7 +120,7 @@ export function useResponsiveAttributes(): void {
       window.removeEventListener('resize', apply);
       window.removeEventListener('orientationchange', apply);
     };
-  }, []);
+  }, [onLogBecomesOverlay]);
 }
 
 /** Touch-first device (no hover): keyboard hints are pointless there. */

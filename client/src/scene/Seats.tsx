@@ -43,6 +43,7 @@ export const Seats = memo(function Seats({
             isWinner={winnerId === s.id}
             wins={winsOf(s.id)}
             showPlate
+            raised={model.layoutCount >= 4 && s.slot % 2 === 0}
           />
         ))}
       {model.emptySlots.map((slot) => (

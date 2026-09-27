@@ -60,8 +60,8 @@ export const RulesModal = memo(function RulesModal() {
                 <tr key={a}>
                   <td className="rules-action">{t(`action.${a}`)}</td>
                   <td>{def.claim ? <CharChip c={def.claim} /> : <span className="muted">{t('rules.noClaim')}</span>}</td>
-                  <td>{t(`rules.effect.${a}`)}</td>
-                  <td>
+                  <td className="rules-effect">{t(`rules.effect.${a}`)}</td>
+                  <td className="rules-block" data-label={t('rules.colBlock')}>
                     {def.blockedBy.length === 0 ? (
                       <span className="muted">{t('rules.unblockable')}</span>
                     ) : (
@@ -96,24 +96,26 @@ export const RulesModal = memo(function RulesModal() {
           ))}
         </ul>
 
-        <h3 className="rules-h">{t('rules.keys')}</h3>
-        <div className="rules-keys">
-          <span>
-            <kbd>1</kbd>–<kbd>7</kbd> {t('rules.key.actions')}
-          </span>
-          <span>
-            <kbd>C</kbd> {t('common.challenge')}
-          </span>
-          <span>
-            <kbd>B</kbd> {t('common.block')}
-          </span>
-          <span>
-            <kbd>P</kbd> / <kbd>Space</kbd> {t('common.pass')}
-          </span>
-          <span>
-            <kbd>Esc</kbd> {t('common.cancel')}
-          </span>
-        </div>
+        <section className="rules-keys-section">
+          <h3 className="rules-h">{t('rules.keys')}</h3>
+          <div className="rules-keys">
+            <span>
+              <kbd>1</kbd>–<kbd>7</kbd> {t('rules.key.actions')}
+            </span>
+            <span>
+              <kbd>C</kbd> {t('common.challenge')}
+            </span>
+            <span>
+              <kbd>B</kbd> {t('common.block')}
+            </span>
+            <span>
+              <kbd>P</kbd> / <kbd>Space</kbd> {t('common.pass')}
+            </span>
+            <span>
+              <kbd>Esc</kbd> {t('common.cancel')}
+            </span>
+          </div>
+        </section>
       </div>
     </Modal>
   );
