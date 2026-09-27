@@ -47,7 +47,9 @@ export const TopBar = memo(function TopBar() {
           <span className="mini-deck" aria-hidden="true" />
           <b>{deck}</b>
         </span>
-        <SoundToggle />
+        <span className="hud-top__sound">
+          <SoundToggle />
+        </span>
         <button
           type="button"
           className={`icon-btn sticker-btn${showLog ? ' is-on' : ''}`}

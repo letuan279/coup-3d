@@ -184,6 +184,11 @@ Policy sketch (normal/hard):
   - Emote picker (8 emotes, cooldown).
   - Rules cheat sheet modal (the official reference card as a table).
 - Keyboard: 1–7 actions, C challenge, B block, P/Space pass, Esc cancel.
+- **Small screens / phones** (`ui/responsive.ts` → `data-hud` / `data-lobby` / `data-log` on `<html>`, styles in `styles/ui-responsive.css`; the camera frames the table into the space each mode leaves free, `scene/framing.ts`):
+  - game HUD: `desktop` (design size) · `scaled` (the same zones shrunk uniformly: small laptops, landscape tablets) · `short` (phones held sideways, ≤520px tall: flatter dock, light scaling) · `portrait` (≤900px wide and taller than wide: top bar, full-width phase banner, table, full-width dock with the hand row and a 4+3 action grid). Where the log has no room beside the table it is a drawer over it, closed by default.
+  - lobby: `desktop` panels either side · `side` (one scrolling column on the right, table on the left) · `portrait` (table strip under the title, scrolling column, sticky start/leave row).
+  - touch (`hover: none`): no keyboard hints, no hover lifts/tooltips.
+  - Home scrolls, with the logo reduced on short screens.
 - Visual language: chunky rounded "sticker" panels (cream, 3px ink outline, hard drop shadow `0 5px 0 ink`), bold Baloo 2 headings, Nunito body, playful micro-animations (press-down buttons, wobble on hover), bright accents (coral/teal/mustard/violet). Card colours follow Coup: Duke violet, Assassin charcoal, Captain blue, Ambassador green, Contessa red.
 - Audio: WebAudio-synthesised SFX (coin clink, card flip, whoosh, challenge sting, block thud, tick, win fanfare, elimination), respecting `ui.muted`. Triggered from bus `events`.
 

@@ -1,0 +1,851 @@
+/* Small screens: tablets, small laptops and phones (both orientations).
+   The layout modes come from ui/responsive.ts as attributes on <html> (so the 3D labels,
+   which live outside .ui-root, can follow them too):
+     data-hud    = desktop | scaled | short | portrait   (game HUD)
+     data-lobby  = desktop | side | portrait              (lobby)
+     data-log    = panel | overlay                        (game log beside / over the table)
+     --hud-scale = uniform zone scale (scaled / short)
+   The 3D camera frames the table into the space these layouts leave free (scene/framing.ts),
+   so the numbers marked "sync" below must match ui/responsive.ts. */
+
+/* ───────────────────────── Touch screens ───────────────────────── */
+.ui-root button,
+.ui-root a,
+.ui-root input {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: none) {
+  /* Keyboard shortcuts mean nothing without a keyboard. */
+  .act-btn__key,
+  .kbd-badge,
+  .rules-keys {
+    display: none;
+  }
+
+  /* No sticky "hover" lifts after a tap. */
+  .act-btn:hover:not(.is-disabled),
+  .hand__slot:hover,
+  .pick-card:hover:not(:disabled),
+  .target-btn:hover:not(:disabled),
+  .emote-toggle:hover,
+  .emote-btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .act-btn:hover:not(.is-disabled) {
+    box-shadow: 0 5px 0 var(--ink);
+  }
+
+  /* Tooltips would stay stuck open after a tap. */
+  .act-tip {
+    display: none;
+  }
+}
+
+/* Mobile browser bars: size against the visible viewport. */
+.modal {
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
+.over-card {
+  max-height: calc(100dvh - 40px);
+}
+
+/* ───────────────────────── Home ───────────────────────── */
+@media (max-width: 760px), (max-height: 560px) {
+  .home-screen {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .home-col {
+    margin: auto 0 0;
+  }
+
+  .corner-tools--br {
+    position: static;
+    flex: none;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 12px 0 auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .logo-title {
+    font-size: 76px;
+  }
+
+  .home-panel {
+    padding: 14px 14px 16px;
+  }
+}
+
+@media (max-height: 560px) {
+  .home-fan,
+  .home-tagline {
+    display: none;
+  }
+
+  .home-logo {
+    padding-top: 0;
+  }
+
+  .logo-title {
+    font-size: 58px;
+    -webkit-text-stroke-width: 5px;
+    text-shadow: 0 5px 0 var(--ink);
+  }
+
+  .logo-ribbon {
+    font-size: 17px;
+  }
+}
+
+/* ───────────────────────── Lobby: one scrolling column ───────────────────────── */
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 8px 0;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-side {
+  display: contents;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-banner {
+  position: relative;
+  top: auto;
+  left: auto;
+  translate: none;
+  max-width: none;
+  flex: none;
+  order: 0;
+  padding: 5px 14px 6px;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-banner__title {
+  font-size: 21px;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-tools {
+  order: 2;
+  flex: none;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-code-card {
+  order: 3;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .seats-card {
+  order: 4;
+  flex: none;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-side--right > .lobby-card {
+  order: 5;
+}
+
+/* The start button stays reachable at the bottom while the column scrolls. */
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-cta {
+  order: 9;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .code-tile {
+  width: 46px;
+  height: 54px;
+  font-size: 30px;
+}
+
+/* Side: the column on the right, the table framed on the left (sync: LOBBY_SIDE_W). */
+:root[data-lobby='side'] .lobby-screen {
+  left: auto;
+  width: min(420px, 55vw);
+  padding-right: max(8px, env(safe-area-inset-right));
+}
+
+/* Portrait: a see-through strip under the title shows the table (sync: LOBBY_PORTRAIT_STRIP). */
+:root[data-lobby='portrait'] .lobby-screen::before {
+  content: '';
+  order: 1;
+  flex: none;
+  height: calc(32vh - 70px);
+  min-height: 90px;
+  pointer-events: none;
+}
+
+:root[data-lobby='portrait'] .lobby-screen {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+
+/* ───────────────────────── Game: log as a drawer ───────────────────────── */
+:root[data-log='overlay'] .log-tab {
+  display: none; /* the top bar's log button opens it */
+}
+
+:root[data-log='overlay'] .log-panel {
+  z-index: calc(var(--z-hud) + 1);
+  box-shadow:
+    0 5px 0 var(--ink),
+    0 12px 40px rgba(43, 33, 64, 0.35);
+}
+
+/* ───────────────────────── Game: scaled zones (small laptops, tablets) ───────────────────────── */
+:root:is([data-hud='scaled'], [data-hud='short']) :is(.dock, .phase-banner, .hud-top, .emote-dock) {
+  scale: var(--hud-scale);
+}
+
+:root[data-hud='scaled'] .phase-banner {
+  max-width: calc((100vw - 600px * var(--hud-scale)) / var(--hud-scale));
+}
+
+:root[data-hud='scaled'] .log-panel {
+  top: calc(68px * var(--hud-scale));
+  bottom: calc((var(--dock-h) + 32px) * var(--hud-scale));
+  width: max(240px, calc(var(--log-w) * var(--hud-scale)));
+}
+
+:root[data-hud='scaled'] .log-tab {
+  top: calc(68px * var(--hud-scale));
+}
+
+:root[data-hud='scaled'] .over-mini {
+  bottom: calc((var(--dock-h) + 36px) * var(--hud-scale));
+}
+
+:root[data-hud='scaled'] .ui-root--game .toasts {
+  top: calc(118px * var(--hud-scale));
+}
+
+:root[data-hud='scaled'] .ui-root--game .conn-banner {
+  bottom: calc((212px + 34px) * var(--hud-scale));
+}
+
+/* ───────────────────────── Game: phone held sideways ───────────────────────── */
+:root[data-hud='short'] .game-hud {
+  --dock-h: 150px; /* sync: SHORT_DOCK_H */
+}
+
+:root[data-hud='short'] .hud-top {
+  top: 8px;
+}
+
+:root[data-hud='short'] .hud-top--left {
+  left: max(8px, env(safe-area-inset-left));
+}
+
+:root[data-hud='short'] .hud-top--right {
+  right: max(8px, env(safe-area-inset-right));
+}
+
+:root[data-hud='short'] :is(.mini-logo, .chip--code, .hud-top__sound) {
+  display: none;
+}
+
+:root[data-hud='short'] .phase-banner {
+  top: 6px;
+  width: 480px;
+  min-width: 0;
+  max-width: calc((100vw - 470px * var(--hud-scale)) / var(--hud-scale));
+  padding: 6px 12px 7px 8px;
+  gap: 4px;
+}
+
+:root[data-hud='short'] .phase-banner__timer {
+  padding-left: 0;
+}
+
+:root[data-hud='short'] .dock {
+  bottom: 8px;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 22px;
+}
+
+:root[data-hud='short'] .hand {
+  --card-w: 66px;
+  gap: 6px;
+  padding-right: 10px;
+}
+
+:root[data-hud='short'] .hand__label {
+  font-size: 11px;
+}
+
+:root[data-hud='short'] .coin-counter {
+  width: 48px;
+}
+
+:root[data-hud='short'] .coin-counter__n {
+  font-size: 30px;
+}
+
+:root[data-hud='short'] .dock__cmd {
+  width: 620px;
+}
+
+:root[data-hud='short'] .act-btn {
+  gap: 3px;
+  padding: 8px 2px 7px;
+  border-radius: 15px;
+}
+
+:root[data-hud='short'] :is(.act-btn__glyph, .act-btn__emblem) {
+  width: 30px;
+  height: 30px;
+}
+
+:root[data-hud='short'] .act-btn__glyph .icon {
+  width: 26px;
+  height: 26px;
+}
+
+:root[data-hud='short'] .act-btn__name {
+  min-height: 0;
+  font-size: 14px;
+}
+
+:root[data-hud='short'] .resp-btn {
+  height: 48px;
+}
+
+:root[data-hud='short'] .response-panel {
+  gap: 8px;
+}
+
+:root[data-hud='short'] .target-btn {
+  height: 48px;
+}
+
+:root[data-hud='short'] .target-picker {
+  gap: 6px;
+}
+
+:root[data-hud='short'] .target-picker__list {
+  padding-top: 4px;
+}
+
+:root[data-hud='short'] .emote-dock {
+  left: max(8px, env(safe-area-inset-left));
+  bottom: 8px;
+}
+
+:root[data-hud='short'] .emote-toggle {
+  width: 50px;
+  height: 50px;
+}
+
+:root[data-hud='short'] .log-panel {
+  top: calc(56px * var(--hud-scale)); /* below the top bar */
+  bottom: 8px;
+  right: max(8px, env(safe-area-inset-right));
+  width: min(320px, 60vw);
+}
+
+:root[data-hud='short'] .over-mini {
+  bottom: calc((var(--dock-h) + 30px) * var(--hud-scale));
+}
+
+:root[data-hud='short'] .ui-root--game .toasts {
+  top: calc(96px * var(--hud-scale));
+}
+
+:root[data-hud='short'] .ui-root--game .conn-banner {
+  bottom: calc((var(--dock-h) + 24px) * var(--hud-scale));
+}
+
+/* ───────────────────────── Game: phone held upright ─────────────────────────
+   Top bar (8–48px) · phase banner (56–~130px) · table · dock (bottom 292px, sync: PORTRAIT_HUD). */
+:root[data-hud='portrait'] .game-hud {
+  --dock-h: 276px;
+  --pad: 8px;
+}
+
+:root[data-hud='portrait'] .hud-top {
+  top: max(8px, env(safe-area-inset-top));
+  height: 40px;
+  gap: 6px;
+}
+
+:root[data-hud='portrait'] .hud-top--left {
+  left: var(--pad);
+}
+
+:root[data-hud='portrait'] .hud-top--right {
+  right: var(--pad);
+}
+
+:root[data-hud='portrait'] :is(.mini-logo, .chip--code, .hud-top__sound) {
+  display: none;
+}
+
+:root[data-hud='portrait'] .chip {
+  height: 34px;
+  padding: 0 9px;
+  font-size: 16px;
+}
+
+:root[data-hud='portrait'] .hud-top .icon-btn {
+  width: 38px;
+  height: 38px;
+}
+
+:root[data-hud='portrait'] .hud-menu__pop {
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+}
+
+:root[data-hud='portrait'] .phase-banner {
+  top: calc(max(8px, env(safe-area-inset-top)) + 46px);
+  left: var(--pad);
+  right: var(--pad);
+  translate: none;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  padding: 6px 10px 7px 8px;
+  gap: 4px;
+  border-radius: 18px;
+}
+
+:root[data-hud='portrait'] .phase-banner__row {
+  gap: 8px;
+}
+
+:root[data-hud='portrait'] .phase-banner__main {
+  font-size: 15px;
+}
+
+:root[data-hud='portrait'] .phase-banner__sub {
+  font-size: 12px;
+  min-height: 0;
+}
+
+:root[data-hud='portrait'] .phase-banner__timer {
+  padding-left: 0;
+}
+
+:root[data-hud='portrait'] .log-panel {
+  top: 138px;
+  left: var(--pad);
+  right: var(--pad);
+  bottom: calc(var(--dock-h) + 16px);
+  width: auto;
+}
+
+:root[data-hud='portrait'] .dock {
+  left: var(--pad);
+  right: var(--pad);
+  bottom: max(8px, env(safe-area-inset-bottom));
+  translate: none;
+  height: var(--dock-h);
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-radius: 22px;
+}
+
+:root[data-hud='portrait'] .hand {
+  --card-w: 50px;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 0 8px;
+  border-right: none;
+  border-bottom: 3px dashed var(--ink-20);
+}
+
+:root[data-hud='portrait'] .hand__cards {
+  gap: 10px;
+}
+
+:root[data-hud='portrait'] .hand__slot {
+  flex-direction: row;
+  gap: 6px;
+  rotate: none;
+}
+
+:root[data-hud='portrait'] .hand__label {
+  font-size: 12px;
+}
+
+:root[data-hud='portrait'] .coin-counter {
+  width: auto;
+  flex-direction: row;
+  gap: 5px;
+}
+
+:root[data-hud='portrait'] .coin-counter__n {
+  font-size: 28px;
+}
+
+:root[data-hud='portrait'] .dock__cmd {
+  width: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Seven actions as a 4 + 3 grid. */
+:root[data-hud='portrait'] .action-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px 6px;
+}
+
+:root[data-hud='portrait'] .act-btn {
+  gap: 2px;
+  padding: 6px 2px 5px;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 var(--ink);
+}
+
+:root[data-hud='portrait'] :is(.act-btn__glyph, .act-btn__emblem) {
+  width: 26px;
+  height: 26px;
+}
+
+:root[data-hud='portrait'] .act-btn__emblem {
+  border-width: 2px;
+}
+
+:root[data-hud='portrait'] .act-btn__glyph .icon {
+  width: 22px;
+  height: 22px;
+}
+
+:root[data-hud='portrait'] .act-btn__name {
+  min-height: 0;
+  font-size: 12.5px;
+}
+
+:root[data-hud='portrait'] .act-btn__delta {
+  padding: 1px 6px 0;
+  font-size: 11px;
+}
+
+:root[data-hud='portrait'] .act-btn__bluff {
+  top: 3px;
+  right: 3px;
+  padding: 1px 3px 0;
+  font-size: 8px;
+}
+
+:root[data-hud='portrait'] .act-btn.is-must::after {
+  border-radius: 17px;
+}
+
+:root[data-hud='portrait'] .response-panel {
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+:root[data-hud='portrait'] .response-panel__head .avatar {
+  width: 38px !important;
+  height: 38px !important;
+}
+
+:root[data-hud='portrait'] .response-panel__claim {
+  font-size: 15px;
+}
+
+:root[data-hud='portrait'] .response-panel__q {
+  font-size: 12.5px;
+}
+
+:root[data-hud='portrait'] .response-panel__buttons {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:root[data-hud='portrait'] .response-panel__buttons .resp-btn {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+  height: 46px;
+  font-size: 15.5px;
+  padding: 8px 10px 7px;
+}
+
+:root[data-hud='portrait'] .target-picker {
+  gap: 4px;
+  justify-content: flex-start;
+  min-height: 0;
+}
+
+:root[data-hud='portrait'] .target-picker__title {
+  font-size: 16px;
+}
+
+:root[data-hud='portrait'] .target-picker__hint {
+  display: none;
+}
+
+:root[data-hud='portrait'] .target-picker__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px 2px 4px 2px;
+}
+
+:root[data-hud='portrait'] .target-btn {
+  height: 46px;
+  box-shadow: 0 3px 0 var(--ink);
+}
+
+:root[data-hud='portrait'] .waiting-panel {
+  gap: 10px;
+  padding: 0 4px;
+}
+
+:root[data-hud='portrait'] .waiting-panel__title {
+  font-size: 17px;
+}
+
+:root[data-hud='portrait'] .waiting-panel__sub {
+  font-size: 12.5px;
+}
+
+:root[data-hud='portrait'] .emote-dock {
+  left: var(--pad);
+  bottom: calc(var(--dock-h) + 20px);
+}
+
+:root[data-hud='portrait'] .emote-toggle {
+  width: 46px;
+  height: 46px;
+}
+
+:root[data-hud='portrait'] .emote-menu {
+  width: min(292px, calc(100vw - 16px));
+}
+
+:root[data-hud='portrait'] .over-mini {
+  bottom: calc(var(--dock-h) + 24px);
+  max-width: calc(100vw - 16px);
+  font-size: 15px;
+}
+
+:root[data-hud='portrait'] .ui-root--game .toasts {
+  top: 140px;
+  width: calc(100vw - 16px);
+}
+
+:root[data-hud='portrait'] .ui-root--game .conn-banner {
+  bottom: calc(var(--dock-h) + 24px);
+}
+
+/* ───────────────────────── Modals & overlays on small screens ───────────────────────── */
+@media (max-width: 560px), (max-height: 520px) {
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal {
+    padding: 12px 14px 14px;
+    max-width: calc(100vw - 16px);
+  }
+
+  .modal__title {
+    font-size: 22px;
+  }
+
+  .toast {
+    max-width: calc(100vw - 16px);
+  }
+
+  .decision-modal {
+    min-width: 0;
+  }
+
+  .decision-modal__why {
+    font-size: 17px;
+  }
+
+  .decision-modal__hint {
+    margin-bottom: 8px;
+    font-size: 13.5px;
+  }
+
+  .decision-cards {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .lose-modal {
+    --card-w: 104px;
+  }
+
+  .exchange-modal {
+    --card-w: 76px;
+  }
+
+  .over-backdrop {
+    padding: 28px 8px 8px;
+  }
+
+  .over-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 28px 14px 12px;
+  }
+
+  .over-portrait {
+    width: 104px;
+    height: 104px;
+  }
+
+  .over-title {
+    font-size: 32px;
+  }
+
+  .rules-scroll {
+    overflow-x: auto;
+  }
+
+  /* Keep the reference table readable: scroll it sideways rather than crushing the columns. */
+  .rules-table {
+    min-width: 600px;
+  }
+
+  .rules-chars {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 520px) {
+  .lose-modal {
+    --card-w: 84px;
+  }
+
+  .exchange-modal {
+    --card-w: 64px;
+  }
+
+  .over-portrait {
+    width: 72px;
+    height: 72px;
+  }
+
+  .over-portrait__avatar {
+    scale: 0.6;
+  }
+}
+
+/* ───────────────────────── Portrait: fine-tuning ───────────────────────── */
+/* The phase banner right above already states the claim: keep only the question. */
+:root[data-hud='portrait'] .response-panel__head > .avatar,
+:root[data-hud='portrait'] .response-panel__claim {
+  display: none;
+}
+
+/* A response with several block options may need more room than the resting dock:
+   grow upwards over the table for that moment. */
+:root[data-hud='portrait'] .dock {
+  height: auto;
+  min-height: var(--dock-h);
+  max-height: calc(100dvh - 150px);
+}
+
+/* In-world name plates and bubbles: smaller, so neighbours do not overlap on a narrow screen. */
+:root[data-hud='portrait'] :is(.sc-plate, .sc-bubble) {
+  zoom: 0.8;
+}
+
+:root[data-hud='short'] :is(.sc-plate, .sc-bubble) {
+  zoom: 0.85;
+}
+
+/* Sideways phones: the emote button sits above the dock's left end. */
+:root[data-hud='short'] .emote-dock {
+  bottom: calc((var(--dock-h) + 26px) * var(--hud-scale));
+}
+
+/* ───────────────────────── Lobby: compact start / leave row ───────────────────────── */
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-cta {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-cta .btn-xl {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding-top: 10px;
+  padding-bottom: 8px;
+  font-size: 21px;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-cta__hint {
+  display: none;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-cta > .btn-ghost {
+  flex: none;
+  width: auto;
+  align-self: stretch;
+}
+
+:root:is([data-lobby='side'], [data-lobby='portrait']) .lobby-wait {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 15px;
+}
+
+/* Exchange: up to four cards in one row. */
+@media (max-width: 560px) {
+  .exchange-modal {
+    --card-w: 66px;
+  }
+
+  .exchange-modal .pick-card {
+    padding: 4px 2px;
+  }
+
+  .exchange-modal .decision-cards {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+}
+
+/* Touch screens: no keyboard, no key hints (Esc on "cancel", 1/2 on card picks…). */
+@media (hover: none) {
+  .ui-root kbd {
+    display: none;
+  }
+}
+
+/* Sideways phones: targets in four columns (a sixth seat scrolls). */
+:root[data-hud='short'] .target-picker__list {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+:root[data-hud='short'] .target-picker__hint {
+  display: none;
+}
+
+/* Wider portrait screens (tablets held upright): keep the stacked layout readable, not stretched. */
+:root[data-hud='portrait'] :is(.dock, .phase-banner) {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+:root[data-lobby='portrait'] .lobby-screen :is(.lobby-banner, .lobby-tools, .lobby-card, .lobby-cta) {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}

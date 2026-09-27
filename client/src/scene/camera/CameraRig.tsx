@@ -14,7 +14,10 @@ import { useGame } from '../../store/useGame';
 import type { SceneMode } from '../sceneModel';
 import {
   fitFraming,
+  gameFovRange,
+  gameMargin,
   gameInsets,
+  lobbyFovRange,
   lobbyFramePoints,
   lobbyInsets,
   lobbyPose,
@@ -39,12 +42,31 @@ export function CameraRig({ mode, layoutCount }: { mode: SceneMode; layoutCount:
       const pose = seatPose(Math.max(2, layoutCount));
       return {
         pose,
-        framing: fitFraming(pose, seatFramePoints(Math.max(2, layoutCount)), size.width, size.height, gameInsets(showLog, size.width)),
+        framing: fitFraming(
+          pose,
+          seatFramePoints(Math.max(2, layoutCount)),
+          size.width,
+          size.height,
+          gameInsets(showLog, size.width, size.height),
+          gameMargin(size.width, size.height),
+          gameFovRange(size.width, size.height),
+        ),
       };
     }
     if (mode === 'lobby') {
       const pose = lobbyPose();
-      return { pose, framing: fitFraming(pose, lobbyFramePoints(), size.width, size.height, lobbyInsets(size.width), 0.03, [30, 70]) };
+      return {
+        pose,
+        framing: fitFraming(
+          pose,
+          lobbyFramePoints(),
+          size.width,
+          size.height,
+          lobbyInsets(size.width, size.height),
+          0.03,
+          lobbyFovRange(size.width, size.height),
+        ),
+      };
     }
     return { pose: null, framing: HOME_FRAMING };
   }, [mode, layoutCount, size.width, size.height, showLog]);

@@ -7,6 +7,7 @@ import { Countdown } from '../common/Countdown';
 import { RichText } from '../common/RichText';
 import { useAvatarOf, useSelfId } from '../hooks';
 import { blockDuringActionWindow, describePhase, joinNames, pendingDeciders } from './phaseText';
+import { isTouchOnly } from '../responsive';
 
 /** Top-centre banner: what is happening right now + countdown (ticks in the last 5s of your decision). */
 export const PhaseBanner = memo(function PhaseBanner() {
@@ -30,7 +31,8 @@ export const PhaseBanner = memo(function PhaseBanner() {
             : yourCall
               ? 'mine'
               : 'neutral';
-    const callKey = game.phase.kind === 'turn' ? 'phase.hintKeys' : 'phase.yourCall';
+    // The number-key tip is for keyboards only.
+    const callKey = game.phase.kind === 'turn' && !isTouchOnly() ? 'phase.hintKeys' : 'phase.yourCall';
     return { d, names, yourCall, callKey, tone, seq: game.phaseSeq, over: game.phase.kind === 'game_over' };
   }, [game, selfId, t]);
 
