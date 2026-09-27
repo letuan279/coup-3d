@@ -10,6 +10,7 @@ import './styles/tokens.css';
 import { App } from './App';
 import { connectSocket } from './net/socket';
 import { waitForArtFonts } from './art/fonts';
+import { startArtWarmup } from './art/warmup';
 
 function render(node: ReactNode) {
   createRoot(document.getElementById('root')!).render(<StrictMode>{node}</StrictMode>);
@@ -34,4 +35,6 @@ waitForArtFonts().then(async () => {
     connectSocket();
     render(<App />);
   }
+  // Pre-encode the HUD art while idle (no PNG encoding when a card first shows up mid-game).
+  if (!gallery) startArtWarmup();
 });

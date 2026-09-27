@@ -10,6 +10,7 @@
 import { create } from 'zustand';
 import type { ActionType, AvatarId, GameView, RoomView } from '@shared/types';
 import { AVATARS } from '@shared/types';
+import { logStartsClosed } from '../ui/responsive';
 
 /**
  * - replaced: the server closed this socket because the same session was opened in another tab
@@ -125,7 +126,8 @@ export const useGame = create<GameStore>((set, get) => ({
     targeting: null,
     hoverPlayerId: null,
     showRules: false,
-    showLog: true,
+    // On phones the log is a drawer over the table: start with it closed.
+    showLog: !logStartsClosed(),
     toasts: [],
   },
 

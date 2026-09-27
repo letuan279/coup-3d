@@ -128,8 +128,8 @@ Views never include other players' hidden characters, deck order, card ids, or a
 
 - `server/index.ts`: HTTP server; in production serves `dist/client` (SPA fallback to index.html, correct MIME types, cache headers for hashed assets); Socket.IO on the same port (`PORT` env, default 3000). Health route `GET /healthz`.
 - **Identity**: `socket.handshake.auth.token` (random secret from localStorage). A token maps to at most one (room, playerId). A second socket with the same token replaces the first (old gets `room:closed {reason:'replaced'}` and is disconnected). On connection, if the token belongs to a room, the socket is re-attached, and `room:state` (+ `game:state` with `resync:true`) is pushed.
-- **Rooms**: in-memory `Map<code, Room>`. Code: 5 chars from `ROOM_CODE_ALPHABET`, case-insensitive join. Max 6 seats. Seats are numbered 0..5; a joiner takes the lowest free seat. Names trimmed, 1..16 chars, unique within a room (append " 2", " 3"… if taken). Avatar: requested if free else first free.
-- **Host**: creator. Host-only: add bot (level easy/normal/hard, auto name + free avatar), kick, settings (turnSeconds ∈ TURN_SECONDS_OPTIONS, responseSeconds ∈ RESPONSE_SECONDS_OPTIONS), start (2–6 seated), back to lobby after game over. If the host leaves or is removed, host passes to the next connected human (lowest seat), else any human.
+- **Rooms**: in-memory `Map<code, Room>`. Code: 5 chars from `ROOM_CODE_ALPHABET`, case-insensitive join. Max 6 seats. Seats are numbered 0..5; a joiner takes the lowest free seat. In the lobby any player may move to an empty seat (`player:update {seat}`, occupied → `seat_taken`) — seat order is turn order. Names trimmed, 1..16 chars, unique within a room (append " 2", " 3"… if taken). Avatar: requested if free else first free.
+- **Host**: creator. Host-only: add bot (level easy/normal/hard, auto name + free avatar), kick, settings (turnSeconds ∈ TURN_SECONDS_OPTIONS, responseSeconds ∈ RESPONSE_SECONDS_OPTIONS), start (2–6 seated), back to lobby after game over, reset a running game (`room:reset`, after a confirmation modal: the game is abandoned without a winner, same clean-up as back to lobby, others get `game:cleared {reason:'reset'}` + a toast). If the host leaves or is removed, host passes to the next connected human (lowest seat), else any human.
 - **Lobby disconnect**: seat kept `LOBBY_DISCONNECT_REMOVE_MS`, then removed (the returning client gets `room:closed {reason:'expired'}`). Room deleted after `EMPTY_ROOM_DELETE_MS` with no connected humans (and immediately if no humans at all).
 - **Game start**: engine `createGame` with seats in seat order and a random seed; status `playing`.
 - **Game disconnect**: seat stays; its decisions time out with default moves; after `RECONNECT_GRACE_MS` the seat becomes `botControlled` and a normal-level bot plays it. Reconnecting (same token) restores control immediately (`botControlled=false`), and the player receives a full resync. `room:leave` mid-game → seat is `left` + `botControlled` for the rest of the game; the socket leaves the room.
@@ -170,9 +170,9 @@ Policy sketch (normal/hard):
 
 ### 4.1 Screens (2D HUD, `client/src/ui`)
 - **Home**: title "COUP — Quán Bài Nắng", name input, avatar picker (8 animals), [Tạo phòng], code input + [Vào phòng]. `?room=CODE` in the URL pre-fills the code. Language toggle, sound toggle, rules button.
-- **Lobby**: room code (big, copy button + copy invite link), seat list (6 slots: avatar portrait, name, host crown, bot badge+level, connected dot), host controls: add bot (level picker), kick, timer settings, [Bắt đầu] (enabled with ≥2 seats); non-host sees "Đang chờ chủ phòng…". Leave button. The 3D scene shows seated characters as they join.
+- **Lobby**: room code (big, copy button + copy invite link), seat list (6 slots: avatar portrait, name, host crown, bot badge+level, connected dot; empty slots offer [Ngồi đây] to move there), host controls: add bot (level picker), kick, timer settings, [Bắt đầu] (enabled with ≥2 seats); non-host sees "Đang chờ chủ phòng…". Leave button. The 3D scene shows seated characters as they join.
 - **Game HUD** (screen zones — keep them fixed so HUD never covers the table centre):
-  - Top bar (≤64px): room code, turn number, menu (rules cheat sheet, log toggle, sound, language, leave).
+  - Top bar (≤64px): room code, turn number, menu (rules cheat sheet, log toggle, sound, language, host: end game → lobby with a confirmation modal, leave).
   - Top-centre phase banner: who is doing what ("Cáo tuyên bố Công tước — Thu thuế"), with a countdown bar/ring (from `deadline`, `phaseDurationMs`, `clockOffset`), turns red under 5s, ticks audibly the last 5s when it's your decision.
   - Right: collapsible game log (≤320px wide) rendered from `game.log` with i18n'd sentences and small character chips.
   - Bottom-centre (≤230px tall): your two cards (big card art; revealed ones greyed with a red X), coin counter, and the **action bar** (7 actions; each shows cost + claimed character chip; disabled with a reason tooltip; "Bắt buộc Đảo chính" state). Targeted actions enter targeting mode: show target buttons (names + coins + influence) and let the player click characters in 3D; Esc cancels.
@@ -184,6 +184,11 @@ Policy sketch (normal/hard):
   - Emote picker (8 emotes, cooldown).
   - Rules cheat sheet modal (the official reference card as a table).
 - Keyboard: 1–7 actions, C challenge, B block, P/Space pass, Esc cancel.
+- **Small screens / phones** (`ui/responsive.ts` → `data-hud` / `data-lobby` / `data-log` on `<html>`, styles in `styles/ui-responsive.css`; the camera frames the table into the space each mode leaves free, `scene/framing.ts`):
+  - game HUD: `desktop` (design size) · `scaled` (the same zones shrunk uniformly: small laptops, landscape tablets) · `short` (phones held sideways, ≤520px tall: flatter dock, light scaling) · `portrait` (≤900px wide and taller than wide: top bar, full-width phase banner, table, full-width dock with the hand row and a 4+3 action grid). Where the log has no room beside the table it is a drawer over it, closed by default.
+  - lobby: `desktop` panels either side · `side` (one scrolling column on the right, table on the left) · `portrait` (table strip under the title, scrolling column, sticky start/leave row).
+  - touch (`hover: none`): no keyboard hints, no hover lifts/tooltips.
+  - Home scrolls, with the logo reduced on short screens.
 - Visual language: chunky rounded "sticker" panels (cream, 3px ink outline, hard drop shadow `0 5px 0 ink`), bold Baloo 2 headings, Nunito body, playful micro-animations (press-down buttons, wobble on hover), bright accents (coral/teal/mustard/violet). Card colours follow Coup: Duke violet, Assassin charcoal, Captain blue, Ambassador green, Contessa red.
 - Audio: WebAudio-synthesised SFX (coin clink, card flip, whoosh, challenge sting, block thud, tick, win fanfare, elimination), respecting `ui.muted`. Triggered from bus `events`.
 
@@ -195,7 +200,7 @@ Policy sketch (normal/hard):
 - **Table objects**: each player's 2 cards face-down in front of them (revealed cards flip face-up with the character art and stand up facing the local seat, greyed, so dead characters stay readable), coin stacks (InstancedMesh, one mesh for all coins) that animate when coins move (arc fly between player ↔ treasury ↔ player), treasury pile + court deck in the centre (deck height follows deckCount).
 - **In-world labels** (drei `Html`, ≤ 1 per seat + bubbles): nameplate (name, coins, hidden-card count, bot/offline badge) with a countdown ring when that player must decide; speech bubbles for claims ("Tôi là Công tước!", "Thách thức!", "Chặn!"), emotes.
 - **Interaction**: in targeting mode (`ui.targeting`), valid targets glow + cursor pointer; click → `api.move({type:'action', action, targetId})`; hover sets `ui.hoverPlayerId`. Active actor gets a warm spotlight/ring.
-- **Performance budget**: ≤150 draw calls, ≤150k triangles, no per-frame React state updates (mutate refs in `useFrame`), shared geometries/materials, textures created once (cache), no postprocessing, `frameloop="always"` but avoid work when idle.
+- **Performance budget**: ≤150 draw calls, ≤150k triangles, no per-frame React state updates (mutate refs in `useFrame`), shared geometries/materials, textures created once (cache), no postprocessing, `frameloop="always"` but avoid work when idle. No one-off work mid-game: HUD art is pre-encoded to blob URLs during idle time (`art/warmup.ts`; never a synchronous `toDataURL` when a card first shows up), card-face textures are uploaded and late-appearing shader programs compiled ahead of time (`scene/SceneWarmup.tsx`).
 
 ## 5. Quality bar
 - `npm run typecheck` clean, `npm test` green, `npm run build` succeeds.

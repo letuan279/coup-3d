@@ -180,6 +180,30 @@ describe('Room — lobby', () => {
     expect(room.updatePlayer(b.id, { name: 'Gamma' })).toEqual({ ok: false, error: 'game_in_progress' });
   });
 
+  it('lets a player move to an empty seat (turn order), but not onto someone else', () => {
+    const { room, join } = setup();
+    const a = join('Alpha');
+    const b = join('Beta');
+    room.addBot(a.id, 'easy');
+    const bot = room.view(a.id).players.find((p) => p.kind === 'bot')!;
+    expect(player(room, b.id).seat).toBe(1);
+    expect(room.updatePlayer(b.id, { seat: 4 })).toEqual({ ok: true });
+    expect(player(room, b.id).seat).toBe(4);
+    // Everyone is told; the list stays in seat order.
+    expect(a.conn.lastRoom?.players.map((p) => p.seat)).toEqual([0, 2, 4]);
+    expect(room.updatePlayer(a.id, { seat: 4 })).toEqual({ ok: false, error: 'seat_taken' });
+    expect(room.updatePlayer(a.id, { seat: bot.seat })).toEqual({ ok: false, error: 'seat_taken' });
+    expect(room.updatePlayer(a.id, { seat: 6 })).toEqual({ ok: false, error: 'bad_request' });
+    expect(room.updatePlayer(b.id, { seat: 4 })).toEqual({ ok: true }); // own seat: no-op
+    // A newcomer takes the lowest free seat — the one Beta left.
+    const c = join('Gamma');
+    expect(player(room, c.id).seat).toBe(1);
+    // The game follows the chosen order.
+    expect(room.start(a.id)).toEqual({ ok: true });
+    expect(game(room).players.map((p) => p.id)).toEqual([a.id, c.id, bot.id, b.id]);
+    expect(room.updatePlayer(b.id, { seat: 5 })).toEqual({ ok: false, error: 'game_in_progress' });
+  });
+
   it('removes a disconnected lobby player after the grace period unless they come back', () => {
     const { room, join, clock, released, notices } = setup();
     const host = join('Host');
@@ -751,6 +775,33 @@ describe('Room — game loop', () => {
     const { room, a, b } = twoHumans();
     expect(room.backToLobby(b.id)).toEqual({ ok: false, error: 'not_host' });
     expect(room.backToLobby(a.id)).toEqual({ ok: false, error: 'game_in_progress' });
+  });
+
+  it('lets the host reset a running game back to the lobby (no win, departed humans dropped)', () => {
+    const { room, join, clock } = setup();
+    const host = join('Host');
+    const guest = join('Guest');
+    const quitter = join('Quitter');
+    room.addBot(host.id, 'normal');
+    expect(room.resetGame(host.id)).toEqual({ ok: false, error: 'bad_request' }); // lobby
+    expect(room.start(host.id)).toEqual({ ok: true });
+    clock.advance(1000);
+    room.leave(quitter.id);
+    expect(room.resetGame(guest.id)).toEqual({ ok: false, error: 'not_host' });
+    expect(room.resetGame(host.id)).toEqual({ ok: true });
+    expect(room.roomStatus).toBe('lobby');
+    expect(room.game).toBeNull();
+    for (const h of [host, guest]) {
+      expect(h.conn.of('game:cleared').at(-1)).toEqual([{ reason: 'reset' }]);
+      expect(h.conn.lastRoom?.status).toBe('lobby');
+    }
+    const players = room.view(host.id).players;
+    expect(players.map((p) => p.name)).toEqual(['Host', 'Guest', expect.any(String)]);
+    expect(players.every((p) => p.wins === 0 && !p.botControlled)).toBe(true);
+    // Bots stop playing: no timers left that touch the old game.
+    clock.advance(10 * 60_000);
+    expect(room.roomStatus).toBe('lobby');
+    expect(room.start(host.id)).toEqual({ ok: true });
   });
 
   it('never pushes another player’s hidden characters', () => {

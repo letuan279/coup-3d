@@ -5,6 +5,7 @@
 import '../styles/ui-base.css';
 import '../styles/ui-screens.css';
 import '../styles/ui-hud.css';
+import '../styles/ui-responsive.css';
 import { useEffect } from 'react';
 import { useT } from '../i18n';
 import { useGame } from '../store/useGame';
@@ -18,6 +19,7 @@ import { RejoinPrompt } from './RejoinPrompt';
 import { RulesModal } from './RulesModal';
 import { SfxDirector } from './SfxDirector';
 import { Toasts } from './Toasts';
+import { useResponsiveAttributes } from './responsive';
 
 type Screen = 'home' | 'lobby' | 'game' | 'dealing';
 
@@ -36,6 +38,7 @@ function DealingNotice() {
 export function UIRoot() {
   const lang = useGame((s) => s.ui.lang);
   useEffect(() => applyDocumentLang(lang), [lang]);
+  useResponsiveAttributes();
 
   const screen = useGame((s): Screen => {
     if (!s.room) return 'home';

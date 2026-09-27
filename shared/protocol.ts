@@ -30,7 +30,9 @@ export type ServerErrorCode =
   | 'name_taken'
   | 'rate_limited'
   /** room:join with a rejoinKey that matches no human seat of that room. */
-  | 'bad_rejoin_key';
+  | 'bad_rejoin_key'
+  /** player:update {seat} naming a seat someone else already sits in. */
+  | 'seat_taken';
 
 export interface HandshakeAuth {
   token: string;
@@ -60,8 +62,11 @@ export interface ClientToServerEvents {
   ) => void;
   /** Leave the room. Mid-game, the seat becomes permanently bot-controlled for the rest of the game. */
   'room:leave': (ack?: Ack) => void;
-  /** Lobby only. */
-  'player:update': (p: { name?: string; avatar?: AvatarId }, ack?: Ack) => void;
+  /**
+   * Lobby only. `seat` (0..MAX_PLAYERS-1) moves you to that empty seat — it sets your place in
+   * the turn order; an occupied seat → `seat_taken`.
+   */
+  'player:update': (p: { name?: string; avatar?: AvatarId; seat?: number }, ack?: Ack) => void;
   /** Host only, lobby only. */
   'room:addBot': (p: { level: BotLevel }, ack?: Ack) => void;
   /** Host only, lobby only. Removes a bot or kicks a human. */
@@ -72,6 +77,12 @@ export interface ClientToServerEvents {
   'room:start': (ack?: Ack) => void;
   /** Host only, after game over: return everyone to the lobby (bots stay, departed humans are removed). */
   'room:backToLobby': (ack?: Ack) => void;
+  /**
+   * Host only, while a game is running (or finished): abandon the game and return everyone to
+   * the lobby (no win counted; departed humans removed, bots kept). Others get
+   * `game:cleared {reason:'reset'}`. In the lobby → `bad_request`.
+   */
+  'room:reset': (ack?: Ack) => void;
   /** `phaseSeq` must match the current GameView.phaseSeq, else `stale_phase`. */
   'game:move': (p: { move: Move; phaseSeq: number }, ack?: Ack) => void;
   'game:emote': (p: { emote: EmoteId }) => void;
@@ -92,7 +103,7 @@ export interface ServerToClientEvents {
    * client (for animations); empty on a full resync (e.g. after reconnect).
    */
   'game:state': (p: { view: GameView; events: LoggedEvent[]; resync: boolean }) => void;
-  /** Game is no longer running (back to lobby). */
-  'game:cleared': () => void;
+  /** Game is no longer running (back to lobby). `reason: 'reset'` = the host abandoned a game (room:reset). */
+  'game:cleared': (p?: { reason: 'reset' }) => void;
   'game:emote': (p: { playerId: string; emote: EmoteId }) => void;
 }

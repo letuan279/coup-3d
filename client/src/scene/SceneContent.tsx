@@ -13,6 +13,7 @@ import { HomeCast } from './HomeCast';
 import { TableLayer } from './table/TableLayer';
 import { PerfProbe } from './PerfProbe';
 import { DevHandle } from './DevHandle';
+import { SceneWarmup } from './SceneWarmup';
 import { startDirector } from './director';
 import { clearReactions } from './reactions';
 
@@ -35,6 +36,7 @@ export function SceneContent({ perfTarget }: { perfTarget: RefObject<HTMLDivElem
       <CameraRig mode={model.mode} layoutCount={model.layoutCount} />
       {model.mode === 'home' ? <HomeCast /> : <Seats model={model} game={game} room={room} />}
       <TableLayer model={model} game={game} lang={lang} gameNumber={gameNumber} />
+      <SceneWarmup lang={lang} />
       {perfTarget && <PerfProbe target={perfTarget} />}
       {import.meta.env.DEV && <DevHandle />}
     </>

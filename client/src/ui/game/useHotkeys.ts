@@ -24,8 +24,8 @@ function digitOf(e: KeyboardEvent): number | null {
 function escape(): boolean {
   const g = useGame.getState();
   const hud = useHud.getState();
-  if (hud.leaveConfirm) {
-    hud.set({ leaveConfirm: false });
+  if (hud.leaveConfirm || hud.resetConfirm) {
+    hud.set({ leaveConfirm: false, resetConfirm: false });
   } else if (g.ui.showRules) {
     g.setShowRules(false);
   } else if (hud.menuOpen || hud.emoteOpen) {
@@ -50,7 +50,7 @@ export function useHotkeys(): void {
       if (e.repeat) return;
       const s = useGame.getState();
       const hud = useHud.getState();
-      if (hud.leaveConfirm || s.ui.showRules || isMoveLocked()) return;
+      if (hud.leaveConfirm || hud.resetConfirm || s.ui.showRules || isMoveLocked()) return;
       const prompt = s.game?.prompt;
       if (!prompt) return;
       const digit = digitOf(e);

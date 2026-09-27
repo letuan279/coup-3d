@@ -4,6 +4,7 @@
  * Pure three.js math — safe to run in tests (no WebGL).
  */
 import { Matrix4, Vector3 } from 'three';
+import { LOBBY_PORTRAIT_STRIP, LOBBY_SIDE_W, PORTRAIT_HUD, SHORT_DOCK_H, hudLayout, lobbyLayout } from '../ui/responsive';
 import { CARD_RADIUS, HEAD_Y, LOCAL_CARD_RADIUS, PLATE_Y, TABLE, frameAt, seatCamera, slotAngle } from './layout';
 
 export interface Insets {
@@ -88,15 +89,44 @@ export function fitFraming(
   };
 }
 
-/** HUD zones from docs/SPEC.md §4.1 (top bar, bottom hand/action bar, right log panel). */
-export function gameInsets(showLog: boolean, width: number): Insets {
-  const right = showLog ? Math.min(320, width * 0.25) : 0;
-  return { top: 64, right, bottom: 230, left: 0 };
+/**
+ * HUD zones from docs/SPEC.md §4.1 (top bar, bottom hand/action bar, right log panel), per
+ * screen mode (ui/responsive.ts): scaled with the HUD, or the stacked phone-portrait layout.
+ * A log drawn over the table (phones) reserves nothing.
+ */
+export function gameInsets(showLog: boolean, width: number, height = 900): Insets {
+  const hud = hudLayout(width, height);
+  if (hud.mode === 'portrait') return { top: PORTRAIT_HUD.top, right: 0, bottom: PORTRAIT_HUD.dock, left: 0 };
+  const s = hud.scale;
+  // The phase banner takes the top centre; the table is framed below it.
+  if (hud.mode === 'short') return { top: 92 * s, right: 0, bottom: (SHORT_DOCK_H + 20) * s, left: 0 };
+  const right = showLog && !hud.logOverlay ? Math.min(320 * s, width * 0.25) : 0;
+  return { top: 64 * s, right, bottom: 230 * s, left: 0 };
 }
 
-/** Lobby HUD: room code + seat list on the left, settings on the right, title on top. */
-export function lobbyInsets(width: number): Insets {
+/** Framing margin: name plates stick out sideways from the framed points — more room on a narrow screen. */
+export function gameMargin(width: number, height: number): number {
+  return hudLayout(width, height).mode === 'portrait' ? 0.15 : 0.05;
+}
+
+/** FOV range for the game camera: a phone held upright needs a much taller view to fit the table's width. */
+export function gameFovRange(width: number, height: number): [number, number] {
+  return width < height ? [34, 125] : [34, 72];
+}
+
+/**
+ * Lobby HUD: room code + seat list on the left, settings on the right, title on top (desktop);
+ * one scrolling column on the right (side); a strip on top under the title (portrait).
+ */
+export function lobbyInsets(width: number, height = 900): Insets {
+  const mode = lobbyLayout(width, height);
+  if (mode === 'portrait') return { top: 58, right: 0, bottom: height * (1 - LOBBY_PORTRAIT_STRIP) - 58, left: 0 };
+  if (mode === 'side') return { top: 8, right: Math.min(LOBBY_SIDE_W, width * 0.55) + 16, bottom: 8, left: 0 };
   return { top: 90, right: Math.min(360, width * 0.27), bottom: 16, left: Math.min(375, width * 0.28) };
+}
+
+export function lobbyFovRange(width: number, height: number): [number, number] {
+  return width < height ? [30, 125] : [30, 70];
 }
 
 /** First-person seat pose for the local player at a table of `total` seats. */

@@ -79,6 +79,8 @@ describe('validate', () => {
     expect(() => parseJoinPayload({ code: 12345, name: 'An' })).toThrow(BadRequest);
     expect(parseUpdatePayload({})).toEqual({});
     expect(parseUpdatePayload({ avatar: 'owl' })).toEqual({ avatar: 'owl' });
+    expect(parseUpdatePayload({ seat: 3, junk: 1 })).toEqual({ seat: 3 });
+    for (const seat of [-1, 6, 1.5, '2', Number.NaN]) expect(() => parseUpdatePayload({ seat })).toThrow(BadRequest);
     expect(parseAddBotPayload({ level: 'hard' })).toEqual({ level: 'hard' });
     expect(() => parseAddBotPayload({ level: 'insane' })).toThrow(BadRequest);
     expect(parseSettingsPayload({ turnSeconds: 45, junk: 1 })).toEqual({ turnSeconds: 45 });

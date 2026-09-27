@@ -60,6 +60,12 @@ export interface JoinProfile {
   avatar?: AvatarId;
 }
 
+/** `player:update` input (lobby only). */
+export interface PlayerPatch extends Partial<JoinProfile> {
+  /** Move to this empty seat (0..MAX_PLAYERS-1): changes the player's place in the turn order. */
+  seat?: number;
+}
+
 /** `room:join` input. `name` is required for a lobby join; a reclaim by `rejoinKey` ignores the profile. */
 export interface JoinRequest {
   name?: string;
@@ -270,11 +276,17 @@ export class Room {
     return OK;
   }
 
-  updatePlayer(playerId: string, patch: Partial<JoinProfile>): Result {
+  updatePlayer(playerId: string, patch: PlayerPatch): Result {
     const seat = this.find(playerId);
     if (this.closed || !seat || seat.kind !== 'human') return fail('not_in_room');
     if (this.status !== 'lobby') return fail('game_in_progress');
     if (patch.avatar && patch.avatar !== seat.avatar && this.avatarTaken(patch.avatar)) return fail('bad_request');
+    if (patch.seat !== undefined && patch.seat !== seat.seat) {
+      if (!Number.isInteger(patch.seat) || patch.seat < 0 || patch.seat >= MAX_PLAYERS) return fail('bad_request');
+      if (this.seats.some((s) => s.seat === patch.seat)) return fail('seat_taken');
+      seat.seat = patch.seat;
+      this.seats.sort((a, b) => a.seat - b.seat);
+    }
     if (patch.avatar) seat.avatar = patch.avatar;
     if (patch.name) {
       seat.name = uniqueName(
@@ -367,7 +379,24 @@ export class Room {
     if (denied) return denied;
     if (this.status === 'playing') return fail('game_in_progress');
     if (this.status !== 'finished') return fail('bad_request');
+    this.returnToLobby();
+    return OK;
+  }
 
+  /**
+   * Host only, while a game is running (or finished): abandon it and return everyone to the
+   * lobby. No win is counted; departed humans are removed, bots stay (as in backToLobby).
+   * Clients get `game:cleared {reason:'reset'}`.
+   */
+  resetGame(byId: string): Result {
+    const denied = this.hostCheck(byId);
+    if (denied) return denied;
+    if (this.status === 'lobby') return fail('bad_request');
+    this.returnToLobby('reset');
+    return OK;
+  }
+
+  private returnToLobby(reason?: 'reset'): void {
     this.runner?.dispose();
     this.runner = null;
     this.status = 'lobby';
@@ -381,10 +410,12 @@ export class Room {
       seat.botControlled = false;
       if (!seat.conn) this.armSeatTimer(seat, now);
     }
-    for (const seat of this.seats) seat.conn?.send('game:cleared');
-    if (!this.reviewOccupancy()) return OK;
+    for (const seat of this.seats) {
+      if (reason) seat.conn?.send('game:cleared', { reason });
+      else seat.conn?.send('game:cleared');
+    }
+    if (!this.reviewOccupancy()) return;
     this.broadcastRoom();
-    return OK;
   }
 
   // ───────────── Game input ─────────────

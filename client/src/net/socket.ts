@@ -141,8 +141,11 @@ export function connectSocket(): ClientSocket {
     if (!resync && events.length) emit('events', events);
   });
 
-  s.on('game:cleared', () => {
-    useGame.setState((st) => ({ game: null, ui: { ...st.ui, targeting: null } }));
+  s.on('game:cleared', (p) => {
+    const st = useGame.getState();
+    // The host abandoned the game (room:reset): tell everyone else why the table emptied.
+    if (p?.reason === 'reset' && st.game && st.room && st.room.hostId !== st.room.youId) st.toast('toast.gameReset', 'info');
+    useGame.setState((s2) => ({ game: null, ui: { ...s2.ui, targeting: null } }));
   });
 
   s.on('game:emote', (p) => emit('emote', p));
@@ -401,12 +404,15 @@ export const api = {
     return !res.ok && rejoinKey && res.error === 'bad_request' ? { ok: false, error: 'bad_rejoin_key' } : res;
   },
   leaveRoom: () => call((s, ack) => s.emit('room:leave', ack as never), ['room:leave', null]),
-  updatePlayer: (p: { name?: string; avatar?: AvatarId }) => call((s, ack) => s.emit('player:update', p, ack as never), ['player:update', p]),
+  /** Lobby: change your name / avatar, or move to an empty `seat` (your place in the turn order). */
+  updatePlayer: (p: { name?: string; avatar?: AvatarId; seat?: number }) => call((s, ack) => s.emit('player:update', p, ack as never), ['player:update', p]),
   addBot: (level: BotLevel) => call((s, ack) => s.emit('room:addBot', { level }, ack as never), ['room:addBot', { level }]),
   kick: (playerId: string) => call((s, ack) => s.emit('room:kick', { playerId }, ack as never), ['room:kick', { playerId }]),
   updateSettings: (p: Partial<RoomSettings>) => call((s, ack) => s.emit('room:settings', p, ack as never), ['room:settings', p]),
   start: () => call((s, ack) => s.emit('room:start', ack as never), ['room:start', null]),
   backToLobby: () => call((s, ack) => s.emit('room:backToLobby', ack as never), ['room:backToLobby', null]),
+  /** Host only, mid-game: abandon the game and return everyone to the lobby. */
+  resetGame: () => call((s, ack) => s.emit('room:reset', ack as never), ['room:reset', null]),
   /** Sends a move for the current phase. Rejections are also broadcast on the bus as 'moveRejected'. */
   async move(move: Move): Promise<ApiResult> {
     const g = useGame.getState().game;

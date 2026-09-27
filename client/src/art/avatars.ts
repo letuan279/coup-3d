@@ -21,7 +21,10 @@ export function getAvatarCanvas(avatar: AvatarId): HTMLCanvasElement {
   return c;
 }
 
-/** Square portrait (256×256) data URL. */
+/**
+ * Square portrait (256×256) image URL: the blob: URL from `warmAvatarUrl` when ready, else a
+ * data URL encoded synchronously (a main-thread stall — see cardArt.ts).
+ */
 export function getAvatarUrl(avatar: AvatarId): string {
   let u = urlCache.get(avatar);
   if (!u) {
@@ -29,4 +32,24 @@ export function getAvatarUrl(avatar: AvatarId): string {
     urlCache.set(avatar, u);
   }
   return u;
+}
+
+const encoding = new Set<AvatarId>();
+
+/** Encodes the portrait off the main thread (`toBlob`) so its first <img> costs nothing. */
+export function warmAvatarUrl(avatar: AvatarId): Promise<void> {
+  if (urlCache.has(avatar) || encoding.has(avatar)) return Promise.resolve();
+  const c = getAvatarCanvas(avatar);
+  if (typeof c.toBlob !== 'function' || typeof URL.createObjectURL !== 'function') {
+    getAvatarUrl(avatar);
+    return Promise.resolve();
+  }
+  encoding.add(avatar);
+  return new Promise((resolve) => {
+    c.toBlob((blob) => {
+      encoding.delete(avatar);
+      if (blob && !urlCache.has(avatar)) urlCache.set(avatar, URL.createObjectURL(blob));
+      resolve();
+    }, 'image/png');
+  });
 }

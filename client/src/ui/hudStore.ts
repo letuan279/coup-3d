@@ -12,6 +12,8 @@ export interface HudState {
   menuOpen: boolean;
   emoteOpen: boolean;
   leaveConfirm: boolean;
+  /** Host: "end the game and return to the lobby?" confirmation. */
+  resetConfirm: boolean;
   /** GameOver overlay minimised to look at the table. */
   overMinimized: boolean;
   /** Bumped on a rejected move; the dock replays its shake animation. */
@@ -25,6 +27,7 @@ export const useHud = create<HudState>((set) => ({
   menuOpen: false,
   emoteOpen: false,
   leaveConfirm: false,
+  resetConfirm: false,
   overMinimized: false,
   shakeSeq: 0,
   set(p) {

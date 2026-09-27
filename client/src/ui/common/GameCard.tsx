@@ -22,7 +22,8 @@ export const GameCard = memo(function GameCard({ character, revealed, width = 10
   const src = character ? getCardFaceUrl(character, lang) : getCardBackUrl();
   const cls = ['game-card', revealed ? 'is-revealed' : '', className ?? ''].filter(Boolean).join(' ');
   return (
-    <span className={cls} style={{ width, height: Math.round((width * 7) / 5), ...style }}>
+    // `--card-w` (set by a container's CSS, e.g. the phone layout) overrides the design width.
+    <span className={cls} style={{ width: `var(--card-w, ${width}px)`, height: `calc(var(--card-w, ${width}px) * 1.4)`, ...style }}>
       <img src={src} alt="" draggable={false} />
       {revealed && (
         <svg className="game-card__x" viewBox="0 0 100 140" preserveAspectRatio="none" aria-hidden="true">

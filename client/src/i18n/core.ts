@@ -77,6 +77,7 @@ export const core: DictPair = {
     'emote.cool': 'Dễ ợt.',
 
     'toast.kicked': 'Bạn đã bị mời ra khỏi phòng.',
+    'toast.gameReset': 'Chủ phòng đã kết thúc ván — mọi người về phòng chờ.',
     'toast.replaced': 'Chỗ ngồi của bạn đã được mở ở tab hoặc thiết bị khác.',
     'toast.roomDeleted': 'Phòng đã đóng.',
     'toast.expired': 'Bạn đã bị đưa ra khỏi phòng vì mất kết nối quá lâu.',
@@ -156,6 +157,7 @@ export const core: DictPair = {
     'emote.cool': 'Easy.',
 
     'toast.kicked': 'You were removed from the room.',
+    'toast.gameReset': 'The host ended the game — everyone is back in the lobby.',
     'toast.replaced': 'Your seat was opened in another tab or on another device.',
     'toast.roomDeleted': 'The room was closed.',
     'toast.expired': 'You were removed from the room after being disconnected for too long.',

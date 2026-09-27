@@ -17,6 +17,7 @@ const SERVER_ERRORS: Record<ServerErrorCode, true> = {
   name_taken: true,
   rate_limited: true,
   bad_rejoin_key: true,
+  seat_taken: true,
 };
 
 export const SERVER_ERROR_CODES = Object.keys(SERVER_ERRORS) as readonly ServerErrorCode[];

@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { SEAT_RADIUS, frameAt, opponentAngles, slotAngle } from './layout';
-import { fitFraming, gameInsets, lobbyFramePoints, lobbyInsets, lobbyPose, seatFramePoints, seatPose, type Insets } from './framing';
+import {
+  fitFraming,
+  gameFovRange,
+  gameInsets,
+  gameMargin,
+  lobbyFovRange,
+  lobbyFramePoints,
+  lobbyInsets,
+  lobbyPose,
+  seatFramePoints,
+  seatPose,
+  type Insets,
+} from './framing';
 
 describe('seat layout', () => {
   it('puts a single opponent straight across the table', () => {
@@ -85,6 +97,34 @@ describe('camera framing', () => {
     const fr = fitFraming(pose, seatFramePoints(4), w, h, ins);
     const c = project(pose, fr.fov, fr.offsetX, fr.offsetY, w, h)(new Vector3(0, 0.79, 0));
     expect(Math.abs(c.x - (w - ins.right) / 2)).toBeLessThan(40);
+  });
+
+  it('keeps the whole table in view on phones, tablets and small laptops (both orientations)', () => {
+    const small: [number, number][] = [
+      [390, 844],
+      [375, 667],
+      [844, 390],
+      [667, 375],
+      [768, 1024],
+      [1024, 768],
+      [1280, 720],
+    ];
+    for (const [w, h] of small) {
+      for (let n = 2; n <= 6; n++) {
+        const pose = seatPose(n);
+        const pts = seatFramePoints(n);
+        const ins = gameInsets(false, w, h);
+        const fr = fitFraming(pose, pts, w, h, ins, gameMargin(w, h), gameFovRange(w, h));
+        const proj = project(pose, fr.fov, fr.offsetX, fr.offsetY, w, h);
+        for (const p of pts) expectInside(proj(p), w, h, ins);
+      }
+      const lp = lobbyPose();
+      const lins = lobbyInsets(w, h);
+      const lpts = lobbyFramePoints();
+      const lfr = fitFraming(lp, lpts, w, h, lins, 0.03, lobbyFovRange(w, h));
+      const lproj = project(lp, lfr.fov, lfr.offsetX, lfr.offsetY, w, h);
+      for (const p of lpts) expectInside(lproj(p), w, h, lins);
+    }
   });
 
   it('frames the lobby between the side panels', () => {

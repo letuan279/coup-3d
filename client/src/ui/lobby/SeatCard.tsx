@@ -20,6 +20,10 @@ interface Props {
   canAddBot?: boolean;
 }
 
+function toastIfFailed(r: { ok: true } | { ok: false; error: string }): void {
+  if (!r.ok) useGame.getState().toast(errorKey(r.error), 'error');
+}
+
 export const SeatCard = memo(function SeatCard({ seat, player: p, youId, isHost, botLevel, canAddBot }: Props) {
   const t = useT();
 
@@ -28,19 +32,27 @@ export const SeatCard = memo(function SeatCard({ seat, player: p, youId, isHost,
       <li className="seat-card is-empty">
         <span className="seat-card__num">{seat + 1}</span>
         <span className="seat-card__empty-avatar" />
-        <span className="seat-card__empty-label">{t('lobby.emptySeat')}</span>
+        <span className="seat-card__empty-label">{!(isHost && canAddBot) && t('lobby.emptySeat')}</span>
+        {/* Anyone may move to an empty seat: seat order is turn order. */}
+        <button
+          type="button"
+          className="btn btn-sm btn-teal seat-card__sit"
+          title={t('lobby.sitHereTitle', { n: seat + 1 })}
+          onClick={() => void api.updatePlayer({ seat }).then(toastIfFailed)}
+        >
+          <Icon name="chevronRight" size={18} />
+          {t('lobby.sitHere')}
+        </button>
         {isHost && canAddBot && (
+          // Icon-only: it shares the row with "Sit here" (the host panel has the labelled button).
           <button
             type="button"
-            className="btn btn-sm btn-ghost seat-card__add"
-            onClick={() => {
-              void api.addBot(botLevel).then((r) => {
-                if (!r.ok) useGame.getState().toast(errorKey(r.error), 'error');
-              });
-            }}
+            className="icon-btn seat-card__add"
+            title={t('lobby.addBotShort')}
+            aria-label={t('lobby.addBotShort')}
+            onClick={() => void api.addBot(botLevel).then(toastIfFailed)}
           >
-            <Icon name="bot" size={18} />
-            {t('lobby.addBotShort')}
+            <Icon name="bot" size={20} />
           </button>
         )}
       </li>
@@ -96,11 +108,7 @@ export const SeatCard = memo(function SeatCard({ seat, player: p, youId, isHost,
           className="icon-btn seat-card__kick"
           title={t('lobby.kick')}
           aria-label={t('lobby.kick')}
-          onClick={() => {
-            void api.kick(p.id).then((r) => {
-              if (!r.ok) useGame.getState().toast(errorKey(r.error), 'error');
-            });
-          }}
+          onClick={() => void api.kick(p.id).then(toastIfFailed)}
         >
           <Icon name="close" size={18} />
         </button>

@@ -122,6 +122,7 @@ export function bindSockets(io: CoupIo, manager: RoomManager, opts: SocketBindin
     socket.on('room:settings', handle('room:settings', (p) => manager.updateSettings(token, parseSettingsPayload(p))));
     socket.on('room:start', handle('room:start', () => manager.start(token)));
     socket.on('room:backToLobby', handle('room:backToLobby', () => manager.backToLobby(token)));
+    socket.on('room:reset', handle('room:reset', () => manager.resetGame(token)));
     socket.on(
       'game:move',
       handle('game:move', (p) => {
