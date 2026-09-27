@@ -9,7 +9,7 @@ import { systemClock, type Clock } from '../clock';
 import { DEFAULT_TIMING, type ServerTiming } from '../timing';
 import { fail, type Connection, type Result } from '../transport';
 import type { DecideBot } from './botDriver';
-import { Room, type ClosedReason, type JoinProfile, type JoinRequest } from './Room';
+import { Room, type ClosedReason, type JoinProfile, type JoinRequest, type PlayerPatch } from './Room';
 
 /** How long (and how many) "your seat is gone" notices are kept for offline clients. */
 const NOTICE_TTL_MS = 6 * 60 * 60_000;
@@ -146,7 +146,7 @@ export class RoomManager {
     return this.withSeat(token, (room, id) => room.leave(id));
   }
 
-  updatePlayer(token: string, patch: Partial<JoinProfile>): Result {
+  updatePlayer(token: string, patch: PlayerPatch): Result {
     return this.withSeat(token, (room, id) => room.updatePlayer(id, patch));
   }
 
@@ -168,6 +168,10 @@ export class RoomManager {
 
   backToLobby(token: string): Result {
     return this.withSeat(token, (room, id) => room.backToLobby(id));
+  }
+
+  resetGame(token: string): Result {
+    return this.withSeat(token, (room, id) => room.resetGame(id));
   }
 
   // ───────────── Game ─────────────

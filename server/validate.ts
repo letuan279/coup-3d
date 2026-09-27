@@ -3,7 +3,7 @@
  * objects (unknown keys dropped) or throw `BadRequest`, which the socket layer turns into a
  * `bad_request` ack. Semantic checks (host, phase, settings options…) live in the rooms.
  */
-import { INFLUENCES_PER_PLAYER, NAME_MAX_LENGTH, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@shared/constants';
+import { INFLUENCES_PER_PLAYER, MAX_PLAYERS, NAME_MAX_LENGTH, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@shared/constants';
 import { ACTION_TYPES, AVATARS, CHARACTERS, EMOTES } from '@shared/types';
 import type { ActionType, AvatarId, BotLevel, Character, EmoteId, Move, RoomSettings } from '@shared/types';
 
@@ -141,12 +141,22 @@ export function parseJoinPayload(value: unknown): JoinInput {
   return out;
 }
 
-export function parseUpdatePayload(value: unknown): Partial<ProfileInput> {
+export interface UpdateInput extends Partial<ProfileInput> {
+  seat?: number;
+}
+
+export function parseUpdatePayload(value: unknown): UpdateInput {
   const p = requireRecord(value, 'player:update');
-  const out: Partial<ProfileInput> = {};
+  const out: UpdateInput = {};
   if (p.name !== undefined) out.name = parseName(p.name);
   const avatar = optionalAvatar(p.avatar);
   if (avatar) out.avatar = avatar;
+  if (p.seat !== undefined) {
+    if (typeof p.seat !== 'number' || !Number.isInteger(p.seat) || p.seat < 0 || p.seat >= MAX_PLAYERS) {
+      throw new BadRequest('seat: invalid');
+    }
+    out.seat = p.seat;
+  }
   return out;
 }
 

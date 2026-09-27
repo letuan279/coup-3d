@@ -8,6 +8,7 @@ import { CoinIcon } from '../common/Coin';
 import { Icon } from '../common/Icon';
 import { Modal } from '../common/Modal';
 import { LangToggle, SoundToggle } from '../common/Toggles';
+import { useIsHost } from '../hooks';
 import { useHud } from '../hudStore';
 
 /** Top strip (≤64px): room code + turn on the left; treasury/deck, quick toggles + menu on the right. */
@@ -60,6 +61,7 @@ export const TopBar = memo(function TopBar() {
         <HudMenu />
       </div>
       <LeaveConfirm />
+      <ResetConfirm />
     </>
   );
 });
@@ -75,6 +77,8 @@ const HudMenu = memo(function HudMenu() {
   const toggleMute = useGame((s) => s.toggleMute);
   const code = useGame((s) => s.room?.code);
   const rejoinKey = useGame((s) => s.room?.rejoinKey);
+  const isHost = useIsHost();
+  const running = useGame((s) => s.room?.status === 'playing' && s.game !== null && s.game.phase.kind !== 'game_over');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -154,6 +158,17 @@ const HudMenu = memo(function HudMenu() {
             <LangToggle compact />
           </div>
           <hr className="menu-sep" />
+          {isHost && running && (
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item menu-item--danger"
+              onClick={() => setHud({ menuOpen: false, resetConfirm: true })}
+            >
+              <Icon name="chevronLeft" size={20} />
+              {t('hud.reset')}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -193,6 +208,44 @@ const LeaveConfirm = memo(function LeaveConfirm() {
         >
           <Icon name="leave" size={20} />
           {t('hud.leave')}
+        </button>
+      </div>
+    </Modal>
+  );
+});
+
+/** Host: confirm abandoning the running game (room:reset). */
+const ResetConfirm = memo(function ResetConfirm() {
+  const t = useT();
+  const open = useHud((s) => s.resetConfirm);
+  const setHud = useHud((s) => s.set);
+  const isHost = useIsHost();
+  const running = useGame((s) => s.room?.status === 'playing');
+  const stale = open && (!isHost || !running);
+  // Host role moved away or the game ended meanwhile: nothing to confirm any more (and the
+  // flag must not pop the modal up again next game).
+  useEffect(() => {
+    if (stale) setHud({ resetConfirm: false });
+  }, [stale, setHud]);
+  if (!open || stale) return null;
+  const close = () => setHud({ resetConfirm: false });
+  return (
+    <Modal title={t('hud.resetTitle')} onClose={close} className="confirm-modal" closeLabel={t('common.close')}>
+      <p className="confirm-modal__body">{t('hud.resetBody')}</p>
+      <div className="confirm-modal__buttons">
+        <button type="button" className="btn btn-ghost" onClick={close}>
+          {t('hud.resetCancel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-coral"
+          onClick={() => {
+            close();
+            void withToast(api.resetGame());
+          }}
+        >
+          <Icon name="chevronLeft" size={20} />
+          {t('hud.resetConfirm')}
         </button>
       </div>
     </Modal>

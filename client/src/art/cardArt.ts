@@ -20,7 +20,16 @@ const faceCache = new Map<string, HTMLCanvasElement>();
 let backCanvas: HTMLCanvasElement | null = null;
 const iconCache = new Map<Character, HTMLCanvasElement>();
 const urlCache = new Map<string, string>();
+/** Bumped whenever cached art is redrawn: an encode started before it is stale. */
+let urlGeneration = 0;
+/** key → generation of the async encode in flight. */
+const encoding = new Map<string, number>();
 
+/**
+ * Synchronous fallback: `toDataURL` PNG-encodes on the main thread and, for a GPU-backed
+ * canvas, waits for a readback while WebGL is busy — a visible hitch mid-game. Normally the
+ * URL is already there from `warmUrl` (art/warmup.ts runs it during idle time).
+ */
 function cachedUrl(key: string, canvas: () => HTMLCanvasElement): string {
   let u = urlCache.get(key);
   if (!u) {
@@ -28,6 +37,41 @@ function cachedUrl(key: string, canvas: () => HTMLCanvasElement): string {
     urlCache.set(key, u);
   }
   return u;
+}
+
+/**
+ * Encodes the art off the main thread (`toBlob`) into a blob: URL, so the first <img> of it
+ * costs nothing. Resolves once cached (or when this encode went stale / failed).
+ */
+export function warmUrl(key: string, canvas: () => HTMLCanvasElement): Promise<void> {
+  if (urlCache.has(key) || encoding.get(key) === urlGeneration) return Promise.resolve();
+  const c = canvas();
+  if (typeof c.toBlob !== 'function' || typeof URL.createObjectURL !== 'function') {
+    cachedUrl(key, () => c);
+    return Promise.resolve();
+  }
+  const gen = urlGeneration;
+  encoding.set(key, gen);
+  return new Promise((resolve) => {
+    c.toBlob((blob) => {
+      if (encoding.get(key) === gen) encoding.delete(key);
+      if (blob && gen === urlGeneration && !urlCache.has(key)) urlCache.set(key, URL.createObjectURL(blob));
+      resolve();
+    }, 'image/png');
+  });
+}
+
+/** Pre-encodes a card face (drawing it first if needed). */
+export function warmCardFaceUrl(character: Character, lang: Lang): Promise<void> {
+  return warmUrl(`face:${character}:${lang}`, () => getCardFaceCanvas(character, lang));
+}
+
+export function warmCardBackUrl(): Promise<void> {
+  return warmUrl('back', getCardBackCanvas);
+}
+
+export function warmCharacterIconUrl(character: Character): Promise<void> {
+  return warmUrl(`icon:${character}`, () => getCharacterIconCanvas(character));
 }
 
 /** Face of a character card (name and ability printed in `lang`). */
@@ -50,12 +94,12 @@ export function getCardBackCanvas(): HTMLCanvasElement {
   return c;
 }
 
-/** Data URL of a card face for <img>. */
+/** Image URL of a card face for <img> (blob: once pre-encoded by art/warmup.ts, else data:). */
 export function getCardFaceUrl(character: Character, lang: Lang): string {
   return cachedUrl(`face:${character}:${lang}`, () => getCardFaceCanvas(character, lang));
 }
 
-/** Data URL of the card back for <img>. */
+/** Image URL of the card back for <img>. */
 export function getCardBackUrl(): string {
   return cachedUrl('back', getCardBackCanvas);
 }
@@ -73,7 +117,7 @@ export function repaintCanvas(c: HTMLCanvasElement, draw: (g: CanvasRenderingCon
 }
 
 /**
- * Redraws the cached card faces and back in place and forgets their data URLs — used when the
+ * Redraws the cached card faces and back in place and forgets their image URLs — used when the
  * web fonts arrive after the art was first drawn (see art/refresh.ts). Emblems and avatars
  * have no text and are left alone.
  */
@@ -83,6 +127,7 @@ export function redrawCardArt(): void {
     repaintCanvas(c, (g) => drawCardFace(g, character, lang));
   }
   if (backCanvas) repaintCanvas(backCanvas, drawCardBack);
+  urlGeneration++;
   for (const key of [...urlCache.keys()]) if (!key.startsWith('icon:')) urlCache.delete(key);
 }
 
