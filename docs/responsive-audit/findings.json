@@ -1,0 +1,2115 @@
+{
+ "note": "Unverified findings from a headless-Chrome screenshot sweep (inspect + merge phases). Verify each before fixing.",
+ "issues": [
+  {
+   "id": "rules-modal-large-screen-overflow",
+   "title": "Rules modal is taller than the viewport on screens ≥1600x900 (incl. 1080p): title and close X off-screen, bottom cut",
+   "severity": "high",
+   "category": "clipping",
+   "screens": [
+    "home > Luật chơi",
+    "game > Menu > Luật chơi",
+    "any tall modal"
+   ],
+   "viewports": [
+    "1600x900 desktop",
+    "1920x1080 desktop"
+   ],
+   "description": "The large-screen media query (min-width:1600px and min-height:900px) scales every .modal by 1.12, but .modal max-height is calc(100dvh - 24px) before the scale. A modal at max-height therefore ends up taller than the viewport and overflows at both ends. At 1920x1080: .modal [523,-51,1397,1131], close button [1326,-30,1369,12], so only its bottom 12px is on screen; the 'Luật chơi Coup' title is invisible and the last bullet is cut. At 1600x900 the modal spans -8.5 to 918px and the title is half cut. The only ways to close it are the backdrop or Esc. 1440x900 is fine.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/home-rules-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-rules-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/home-rules-1440x900.png (OK, for comparison)",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-rules-1440x900.png (OK, for comparison)",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/rules-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/rules-1600x900.png",
+    "client/src/styles/ui-hud.css:1640-1642 (.modal { scale: 1.12 })",
+    "client/src/styles/ui-responsive.css:48-51 (.modal max-height: calc(100dvh - 24px))"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=home\" --w 1920 --h 1080 --wait 8000 --out rules-1920.png --lint --steps '[{\"clickText\":\"Luật chơi\"},{\"wait\":2500}]'",
+   "suspectedCause": "ui-hud.css:1610-1643 applies `.modal { scale: 1.12 }` after the max-height limit (1056 x 1.12 = 1183 > 1080). Fix: inside that query set max-height: calc((100dvh - 24px) / 1.12), use zoom instead of scale, or leave tall modals unscaled.",
+   "sources": [
+    "sweep:desktop-large",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "phone-nameplates-overlap",
+   "title": "Opponent name plates overlap each other on phones and small tablets, hiding names, coins, card pips and bot badges",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked",
+    "invite (behind modal)",
+    "target picker",
+    "emote",
+    "spectator / game over table"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "600x960 mobile",
+    "768x1024 mobile",
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile",
+    "667x330 mobile"
+   ],
+   "description": "Opponent plates sit in one row at nearly the same screen height, and each plate covers its neighbour. What gets hidden: bot-level badges ('Vừa'/'Normal', 'Dễ'/'Easy'), the second card pip of Mai, coin counts, and the first letters of names (e.g. 'g Gấu', 'hỏ Bông'). Countdown rings on responders (respond, block, blockresp, pendingblock, blocked, waiting) add ~36-40px per plate and make it worse; English badges are wider. With 6 players it is worst: Ông Gấu's plate is almost fully behind Mai's highlighted plate and Khoa's is cut to 'Kh' behind Cú Mèo's (measured at six-844: neighbours overlap by 34-46px; at 390 portrait overlaps of 20-36px). In targeting mode the plates are tap targets, so overlaps also overlap tap areas. At 768x1024 six plates touch edge to edge; 820x1180 and desktop are fine. Players cannot reliably read coins, cards left or bot level for the middle opponents.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/respond-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/block-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/six-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/six-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/respond-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/six-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/game-en-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/ref-respond-1440x900.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-en-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/waiting-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/six-600x960.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/six-600-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/respond-600x960.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/six-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/six-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/six-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/six-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/respond-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/respond-844x390-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/respond-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/waiting-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/blockresp-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/game-844x390-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-six-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-target.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-game.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-en-game.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-p390-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-l844-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390o-spectator.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/blockresp-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/respond-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/menu-667x330.png",
+    "client/src/styles/ui-responsive.css:762-768 (zoom 0.8 portrait / 0.85 short)",
+    "client/src/scene/scene.css:45-51,90-108,189-207,286-293",
+    "client/src/scene/labels/Nameplate.tsx:71-76,107-109",
+    "client/src/scene/labels/labelSync.ts:34-60",
+    "client/src/scene/framing.ts:99,103-119,150-165 (gameMargin, seatPose, seatFramePoints)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=six\" --w 390 --h 844 --mobile --wait 15000 --out six.png --lint",
+   "suspectedCause": "Plates are fixed-size HTML labels (name + pips + bot badge + 36px ring), only shrunk by a fixed zoom 0.8/0.85, with no collision avoidance in labelSync. The camera sits at seat height so heads project to the same Y, and framing fits only plate centre points. Options: compact plate variant on phones (icon-only bot badge, ring over avatar), stagger alternate plates vertically, steeper camera pitch, width-dependent zoom/margin.",
+   "sources": [
+    "sweep:tablet",
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:interactions",
+    "sweep:real-flow",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "income-coin-overlaps-label",
+   "title": "Income button: 34px coin icon overlaps the 'Thu nhập' / 'Income' label in portrait and short action grids",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "game (choose action)"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "600x960 mobile",
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "900x1100 mobile",
+    "844x390 mobile (smaller overlap)"
+   ],
+   "description": "In the portrait 4+3 action grid (and short landscape mode) the Income coin is drawn at 34px inside a 26px glyph box and overflows onto the label (measured 6px overlap at 390: coin 668-702, label starts 696). 'Thu nhập' reads as 'Thu n[coin]p' and most of 'Income' is hidden. The other glyphs shrink correctly, so this one button looks broken. Desktop is fine.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/income-768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/game-768x1024-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/ix-768x1024.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/game-en-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-en-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-game-base.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-en-game.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-menu-open.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-p390-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-game-start.png",
+    "client/src/ui/game/ActionBar.tsx:16",
+    "client/src/styles/ui-responsive.css:312 (short), :515-526 (portrait)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 390 --h 844 --mobile --wait 15000 --out game.png --lint",
+   "suspectedCause": "ActionGlyph renders <CoinIcon size={34} /> (svg.coin-icon). The portrait/short overrides only resize `.act-btn__glyph .icon`. Use `.act-btn__glyph :is(.icon, .coin-icon)` (22px portrait, 26px short).",
+   "sources": [
+    "sweep:tablet",
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:interactions",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "short-log-drawer-covers-dock",
+   "title": "Landscape phone (short mode): log drawer covers the dock's Block/Pass/action buttons and the banner timer",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "respond",
+    "block",
+    "game (log open)"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "667x375 mobile"
+   ],
+   "description": "In short mode the log drawer (min(320px,60vw) wide) runs from under the top bar to 8px above the bottom at z-index z-hud+1, covering the right half of the dock. With the log open during block, 'CHẶN BẰNG Đại sứ' and 'Cho qua' are fully covered (lint hit test reports them covered by log lines); during respond 'Cho qua' is hidden; in the action turn actions 4-7 are covered. It also covers the banner's countdown and Khoa's plate. The panel is 95% opaque, so hidden buttons ghost through the log text. Players open the log exactly when deciding whether to challenge, and the timer keeps running. Portrait stops the drawer above the dock.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-block-logopen.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-respond-logopen.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-block.json (lint.covered)",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-log-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-log-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/l844-log.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/respond-844x390-log.png",
+    "client/src/styles/ui-responsive.css:352-357 (short .log-panel bottom: 8px)",
+    "client/src/styles/ui-responsive.css:200-205 (overlay z-index)",
+    "client/src/styles/ui-hud.css:294-306 (background rgba 0.95)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=block\" --w 844 --h 390 --mobile --wait 7000 --out block-log.png --lint --steps '[{\"eval\":\"document.querySelector(\\\"[aria-pressed][aria-label*=nhật]\\\").click(); 1\"},{\"wait\":1200}]'",
+   "suspectedCause": "`:root[data-hud='short'] .log-panel { bottom: 8px }`. End it above the dock (bottom: calc((var(--dock-h) + 20px) * var(--hud-scale))) like portrait, and/or make it opaque.",
+   "sources": [
+    "sweep:phone-landscape",
+    "sweep:interactions",
+    "sweep:real-flow",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "phase-banner-wrap-covers-plates",
+   "title": "Phase banner that wraps to 2-5 lines grows past the fixed top inset and covers opponent name plates",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "block",
+    "pendingblock",
+    "blocked",
+    "respond",
+    "waiting",
+    "blockresp"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile",
+    "390x844 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "1280x720"
+   ],
+   "description": "Long claims wrap the phase banner, but the camera reserves a fixed top inset (92*s in short mode, 138px in portrait, 64*s on desktop), so plates are framed just below a one-line banner. Short mode: block/pendingblock/blocked banners (2-4 lines, bottom y≈89-110) hide the names of all four opponents while the player must decide Challenge/Pass (pendingblock-844: banner bottom 91 vs plate tops 74-78). Portrait 320x640: pendingblock banner reaches y≈190 and covers every plate; at 360/375 the banner is 150-175px, beyond the 138px reserve. Desktop 1280x720: the 3-line pendingblock banner reaches y120 and half-hides Khoa's plate (top 113). The wrap also splits action names ('Thu / thuế', 'Ông / Gấu'), and in short mode the dock repeats the same sentence.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/blocked-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/blocked-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-pendingblock-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-block.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/l844-respond.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/l844-game-start.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/pendingblock-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/pendingblock-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/waiting-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/pendingblock-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/blocked-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/pendingblock-1280x720.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/crops2/c-pb1280-khoa.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/blocked-1280x720.png",
+    "client/src/styles/ui-responsive.css:259-266 (short banner 480px)",
+    "client/src/styles/ui-responsive.css:412-440 (portrait banner)",
+    "client/src/scene/framing.ts:99-109 (fixed top insets)",
+    "client/src/ui/responsive.ts:48-53 (PORTRAIT_HUD.top=138)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=pendingblock\" --w 844 --h 390 --mobile --wait 8000 --out pb-844.png --lint",
+   "suspectedCause": "No line clamp on .phase-banner and a fixed top inset in gameInsets. Options: clamp the headline to 1-2 lines (full text is in dock/log), widen the short-mode banner, nowrap action names, or measure the banner and feed its height into framing.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:interactions",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "banner-under-top-chips",
+   "title": "Phase banner slides under the top-left chips (LƯỢT chip covers actor avatar) and touches the right cluster",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "pendingblock",
+    "blocked",
+    "waiting",
+    "six",
+    "lose",
+    "exchange",
+    "invite",
+    "over"
+   ],
+   "viewports": [
+    "1024x768",
+    "1100x690 desktop",
+    "1180x820 mobile",
+    "820x560 desktop (scaled)",
+    "1024x1366 mobile",
+    "667x330 mobile (short)"
+   ],
+   "description": "The centred banner's max-width reserves 300 design px per side (235 in short mode), but the left cluster (logo + PHÒNG + LƯỢT chips) is ~323-336 design px and the short-mode right cluster ~250px. At 1024x768 the banner spans x279-745 while the left cluster ends at 312, so the LƯỢT chip covers the actor's avatar, and the right edge touches the coins chip (747). At 1100x690 and 1180x820 the chip overlaps the banner's left corner; at 1024x1366 it covers half the avatar and the banner is squeezed to ~466px, causing bad wraps (orphan 'bạn'). At 820 the countdown slides under the coin chip; at 667x330 the '27s' label is cut off. Affects desktop widths 1100-1209 and every width in scaled mode. 1280x720 and 1366x768 are fine.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/game-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/crops2/a-g1024-banner.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/block-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/pendingblock-1024x768.png",
+    "probe: .phase-banner [279,10,745,87], .hud-top--left [12,12,312,53], .hud-top--right [747,12,1012,53]",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/chip-overlap.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/block-1180x820.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/block-1024x1366.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/exchange-1024x1366.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/game-1100x690.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/game-820x560.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/six-1024x1366.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/menu-667x330.png",
+    "client/src/styles/ui-hud.css:176-184 (max-width: calc(100vw - 600px), min-width 380px)",
+    "client/src/styles/ui-responsive.css:212-213 (scaled)",
+    "client/src/styles/ui-responsive.css:263 (short: 470px)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 1024 --h 768 --wait 7000 --out g1024.png --lint",
+   "suspectedCause": "Side reserve smaller than real cluster widths. Reserve ~2×340 design px (desktop/scaled) and ~2×260 (short), lay the banner out between the clusters, or hide the mini-logo/room chip below ~1210px.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:tablet",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "scaled-log-covers-right-plate",
+   "title": "Scaled-mode log panel is wider than the camera's right inset and covers the right-most player's plate",
+   "severity": "high",
+   "category": "camera",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "pendingblock",
+    "waiting",
+    "six",
+    "invite"
+   ],
+   "viewports": [
+    "1024x768",
+    "820x560 desktop (scaled)"
+   ],
+   "description": "In scaled mode the log is max(240px, 300px×s) wide plus 12px margin, but gameInsets reserves only min(320×s, 0.25×width). At 1024x768 the log spans x733-1012 (291px total) vs 256px reserved; in six, Cú Mèo's plate [610-794] is cut at 733 and the owl sits behind the log; in pendingblock/block/respond/waiting Khoa's offline badge and card icons are hidden. At 820x560 about 47px of framed table sits under the log and Khoa's plate edge is clipped. With the log closed all plates fit.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/six-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/pendingblock-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/crops2/b-pb1024-khoa.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/block-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/probe/game-1024x768-nolog.png",
+    "probe six-1024: .log-panel [733,63,1012,541], plate 'Cú Mèo' [610,166,794,213]",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/game-820x560.png",
+    "client/src/scene/framing.ts:103",
+    "client/src/styles/ui-responsive.css:216-220"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=six\" --w 1024 --h 768 --wait 7000 --out six1024.png --lint",
+   "suspectedCause": "framing.ts right inset `Math.min(320 * s, width * 0.25)` vs CSS `max(240px, calc(var(--log-w) * var(--hud-scale)))` + 12px. Use the same formula (Math.max(240, 300*s) + 12*s) and allow for plate half-widths.",
+   "sources": [
+    "sweep:laptop-small",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "hand-row-overflows-dock",
+   "title": "Portrait hand row overflows the dock: first card clipped at the left edge, 'XU' label cut at the right",
+   "severity": "high",
+   "category": "clipping",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "lose",
+    "exchange",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked",
+    "invite",
+    "over"
+   ],
+   "viewports": [
+    "320x640 mobile",
+    "360x740 mobile"
+   ],
+   "description": "The portrait hand row (card + 'Công tước' label, card + 'Nữ bá tước' label, coin counter '4 XU') is wider than the dock. At 320x640 the first card runs past the left screen edge (img [-6,356,38,420]) and 'XU' runs off the right edge ([312..329]). At 360x740 the card touches the dock's left border and 'XU' the right border. 375 just fits; English labels fit at 360.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-320x640.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-360x740.png",
+    "client/src/styles/ui-responsive.css:462-500",
+    "client/src/styles/ui-hud.css:506-509"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 320 --h 640 --mobile --wait 15000 --out game-320.png --lint",
+   "suspectedCause": "Centred row of two 50px cards + nowrap labels + gaps + coin counter; nothing shrinks or wraps. Hide/wrap .hand__label below ~380px or put it under the card, and shrink the coin counter.",
+   "sources": [
+    "sweep:phone-small"
+   ]
+  },
+  {
+   "id": "vietnamese-diacritics-clipped",
+   "title": "Vietnamese stacked diacritics clipped in player names (Nguyễn→'Nguyên', Ếch→'Êch', Ỉn→'Ín')",
+   "severity": "high",
+   "category": "i18n",
+   "screens": [
+    "lobby seat list",
+    "3D name plates (lobby + game)"
+   ],
+   "viewports": [
+    "1280x720",
+    "390x844 mobile",
+    "844x390 mobile"
+   ],
+   "description": "Names whose capitals or ê carry a second upper mark lose the top mark in overflow:hidden boxes with tight line-height. The seat card shows 'Nguyên Hoàng Lon' for 'Nguyễn Hoàng Lon' and 'Ín Con' for 'Ỉn Con'; the 3D plate shows 'Êch Xanh' while the log shows 'Ếch Xanh' correctly. Ếch Xanh and Ỉn Con are default bot names and Nguyễn is the most common surname, so this appears in almost every game.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-d1280-seatnames.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-d1280-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-d1280-ech.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-d1280-logech.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-lobby-top.png",
+    "client/src/scene/scene.css:117-130",
+    "client/src/styles/ui-screens.css:390-396",
+    "client/src/styles/ui-base.css:39 (.truncate)"
+   ],
+   "reproCommand": "cd scratchpad && node shot-long.mjs --timeout 1700000 --url http://localhost:5173/ --w 1280 --h 720 --wait 500 --out shots/real/x.png --lint --steps \"$(node mkflow3.mjs d1280 'Nguyễn Hoàng Long')\"",
+   "suspectedCause": "overflow:hidden with line-height ~1.1 in Baloo 2. Affects .sc-plate__text, SeatCard .truncate, likely TargetPicker .target-btn__name.truncate and GameOver tally .truncate. Use line-height ≥1.3 or padding-block ~0.15em.",
+   "sources": [
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "gameover-avatar-covers-title",
+   "title": "Game over: winner avatar covers the 'Bạn thắng!' / winner headline on phones",
+   "severity": "high",
+   "category": "overlap",
+   "screens": [
+    "over"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile"
+   ],
+   "description": "The Avatar is rendered at size 132 while .over-portrait shrinks (104x104 at max-width 560; 72x72 at max-height 520 with scale 0.6), so the avatar spills out of its box onto .over-title. 'Bạn thắng!' reads 'Bạn t…g!' / 'Bạn tliang!'; in real flow 'Heo Mập thắng!' loses its diacritics; in EN the ring touches 'You win!'. Landscape measured: portrait box y69-141, avatar 90-172, title 155-187. PS captures also show the 'CHIẾN THẮNG' ribbon sitting over the HUD top bar and a 27px 'Xem bàn' target.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-390x844-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/over-title.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/over-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/over-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/over-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-over-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-p390o-title.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390o-over.png",
+    "client/src/ui/game/GameOver.tsx:118",
+    "client/src/styles/ui-responsive.css:704-707,722-743",
+    "client/src/styles/ui-hud.css:1464-1489"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=over\" --w 390 --h 844 --mobile --wait 15000 --out over.png --lint",
+   "suspectedCause": "Avatar size fixed at 132; max-width 560 block has no avatar scale, and in the max-height 520 block the grid's implicit 132px row mis-centres the scaled avatar. Render the Avatar at the box size (or scale ~0.78 for max-width 560, and grid-template:100%/100% for short).",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "lobby-plates-clipped",
+   "title": "Lobby 3D name plates clipped at the screen edge, hidden under the side panels, or tucked under the 'Sảnh chờ' banner",
+   "severity": "medium",
+   "category": "camera",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "1280x720",
+    "1180x820 mobile",
+    "1024x768",
+    "1024x1366 mobile",
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "844x390 mobile",
+    "667x375 mobile",
+    "932x430 mobile"
+   ],
+   "description": "lobbyInsets does not account for plate width or the real banner/panel sizes. Desktop lobby (1280x720, 1180x820): the leftmost plate starts under the 'Người chơi' panel ('é Heo', 'óc Tía', only '[Normal]'), because left inset min(375, 0.28w) is ≤ the 360px column. Side lobby (1024x768, 1024x1366, 844x390, 667x375, 932x430): Bé Heo's plate hangs off the left edge (x -10 to -17) and the pig is cropped; at 667 Ông Gấu's plate overlaps Mai's; the lower-left is empty rug and at 1024x1366 the top-left is empty ceiling. Portrait strip (320-430 wide): Bé Heo's plate is cut to 'é Heo', and Mai's/Ông Gấu's plates slide under the banner (top inset 58 vs banner bottom ~82-90); at 375x667 the player list is hidden behind the sticky CTA, the subtitle leaves an orphan 'trống.', and kick buttons are 29px. At 1366x768 plates sit clear.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1280x720-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1280x720.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/crops2/g-lobby1024-beheo.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/lobby-1180x820-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/lobby-1180x820.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/lobby-1024x1366.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/lobby-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lobby-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lobby-390x844-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lobby-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/lobby-en-plates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lobby-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lobby-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lobby-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lobby-360x740.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/lobby-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/lobby-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/lobby-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-lobby-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-lobby-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-lobby-bottom.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/d1280-lobby-gpu-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-lobby-bots.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-lobby-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-p390-lobbyplates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-l844-lobbyplates.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-lobby-top.png",
+    "client/src/scene/framing.ts:121-137,173-178 (lobbyInsets, lobbyFramePoints)",
+    "client/src/styles/ui-screens.css:181-205",
+    "client/src/styles/ui-responsive.css:140-176"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1280 --h 720 --wait 7000 --out lobby1280.png --lint",
+   "suspectedCause": "lobbyInsets: desktop left min(375, 0.28w) smaller than the 360px column; side mode left 0 with a 5% margin; portrait top 58 smaller than the banner. Framing fits only plate anchor points, not half-widths, and plates are not clamped to the viewport.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:tablet",
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:interactions",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "game-plates-clipped-at-edges",
+   "title": "In-game plates clipped at the screen edges when countdown rings or bot tags widen them",
+   "severity": "medium",
+   "category": "clipping",
+   "screens": [
+    "block",
+    "blocked",
+    "blockresp",
+    "respond",
+    "six"
+   ],
+   "viewports": [
+    "1024x768",
+    "360x740 mobile",
+    "320x640 mobile",
+    "375x667 mobile"
+   ],
+   "description": "The leftmost plate (Bé Heo) runs off the left edge when it carries a countdown ring: at 1024x768 ring at [-3,172,27,202] and '12' label at x -5; at 320 sc-ring__sec [-5,181,24,210]; at 360 the ring touches x=0 in block/blocked/blockresp. In 6-player games Cú Mèo's plate with 'Khó'/'Hard' tag runs off the right edge at 320 and in English at 360. Without the ring the plates fit.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/block-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/blocked-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/block-1024x768.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/blocked-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-320x640.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/blocked-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-en-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-320x640.png",
+    "client/src/scene/framing.ts:108-111,150-160"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=block\" --w 1024 --h 768 --wait 7000 --out block1024.png --lint",
+   "suspectedCause": "Framing fits only the plate centre with gameMargin 0.05 (0.15 portrait); plates stick out 70-90px sideways. Add plate half-widths to the framed points, widen the margin, or clamp labels into the viewport in labelSync.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:phone-small"
+   ]
+  },
+  {
+   "id": "portrait-response-buttons-unequal",
+   "title": "Portrait 2-button responses: Challenge takes ~2/3-3/4 of the row and Pass is squeezed (label overflows at 320)",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "respond",
+    "blockresp",
+    "pendingblock"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "600x960 mobile",
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "900x1100 mobile"
+   ],
+   "description": "With only Thách thức + Cho qua, Challenge gets ~70-75% of the row (e.g. 240 vs 96px at 390; 390 vs 140px at 820x1180). 'Cho qua' touches its right edge at 360/375 and 'qua' crosses the border at 320. Desktop and landscape give equal widths. Pass becomes the harder target.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/blockresp-portraits.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/pendingblock-portraits.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/inbetween.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/blockresp-1180x820.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/blockresp-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/pendingblock-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/blockresp-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-respond.png",
+    "client/src/styles/ui-hud.css:971-975",
+    "client/src/styles/ui-responsive.css:572-580"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=respond\" --w 320 --h 640 --mobile --wait 15000 --out respond-320.png --lint",
+   "suspectedCause": "Specificity clash: portrait `.resp-btn { flex: 1 1 calc(50% - 4px) }` (0,4,0) wins for the first button, but `...:first-child:nth-last-child(2) ~ .resp-btn { flex: 1 1 0 }` (0,5,0) wins for the second, so bases are 50% vs 0.",
+   "sources": [
+    "sweep:tablet",
+    "sweep:phone-small",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "block-button-truncates-character",
+   "title": "Block buttons truncate the claimed character ('Chặn bằng Thuyền trư…'); BỊP badge covers the kicker at 320",
+   "severity": "medium",
+   "category": "clipping",
+   "screens": [
+    "block"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile"
+   ],
+   "description": "In the block prompt the Captain block button cuts its label to 'Thuyền trư…' / 'Thuyền trưở…' (to 'Thuyền …' at 320), so players can't read which card they claim. At 430 portrait it fits; 'Đại sứ' fits everywhere. At 320 the absolutely positioned 'BỊP' badge (9.5px) covers the end of the 'CHẶN BẰNG' kicker ('CHẶN BANG'). Challenge/Pass get the same share despite short labels.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/block-btns.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/block-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/block-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-block.png",
+    "client/src/styles/ui-hud.css:962-997,1031"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=block\" --w 320 --h 640 --mobile --wait 15000 --out block-320.png --lint",
+   "suspectedCause": "`.resp-btn__stack span { white-space: nowrap; text-overflow: ellipsis }` at 15.5-16px inside a half-width/quarter-width button with a 26-38px emblem. Allow a 2-line wrap or smaller font, shrink the emblem, give block buttons more flex, and move the bluff badge off the kicker.",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "portrait-log-drawer-fixed-top",
+   "title": "Portrait log drawer and toasts use a fixed 138/140px top and cover the wrapped phase banner's timer",
+   "severity": "medium",
+   "category": "overlap",
+   "screens": [
+    "respond (log open)",
+    "game > log",
+    "any toast in portrait"
+   ],
+   "viewports": [
+    "360x740 mobile",
+    "390x844 mobile"
+   ],
+   "description": "The portrait drawer is pinned at top:138px and toasts at top:140px (matching PORTRAIT_HUD.top). When the banner wraps (e.g. 'Mai tuyên bố [Công tước] để Thu thuế' at 360 ends at 145.6-151px; real names split 'để Thu / thuế' and end ~150px at 390), the drawer (z 11, above the banner's z 10) covers the banner's bottom border, countdown bar and seconds, and the panels look fused. Toasts do the same.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-log.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-log.json (bannerBottom 145.6, logTop 138)",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/respond-360x740-log.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-respond.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-log.png",
+    "client/src/styles/ui-responsive.css:442-448 (log top: 138px)",
+    "client/src/styles/ui-responsive.css:639-642 (toasts top: 140px)",
+    "client/src/ui/responsive.ts:48-53 (PORTRAIT_HUD.top 138)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=respond\" --w 360 --h 740 --mobile --out drawer-top.png --steps '[{\"click\":\"button[aria-label=\\\"Hiện nhật ký\\\"]\"},{\"wait\":800}]'",
+   "suspectedCause": "Fixed top offsets assume a one-line banner. Measure the banner (ResizeObserver) and publish its bottom as a CSS variable for the drawer, toasts and gameInsets, or clamp the banner to two lines; nowrap action names in RichText.",
+   "sources": [
+    "sweep:interactions",
+    "sweep:real-flow",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "fixed-dock-height-empty-space",
+   "title": "Dock keeps a fixed height (276px portrait, 150 design px short) leaving large empty areas while the table is squeezed",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "respond",
+    "blockresp",
+    "pendingblock",
+    "waiting",
+    "six",
+    "blocked",
+    "invite",
+    "lose",
+    "exchange"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile"
+   ],
+   "description": "Only the choose-action grid fills the dock. Respond rows leave ~75-80px of empty cream below the buttons; waiting states show one status line in ~170px (portrait) or a mostly blank ~123px dock (short, ~32% of the screen); lose/exchange show only the 'make your choice' hint. Content is also duplicated (timer bar in banner and dock; blocked repeats the banner sentence). Meanwhile the 3D table gets ~160-200px and plates collide.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/respond-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/six-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/blocked-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/waiting-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/six-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/waiting-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/respond-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/respond-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/six-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/waiting-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/six-667x375.png",
+    "client/src/styles/ui-responsive.css:373-376,755-759",
+    "client/src/ui/responsive.ts:48-53 (PORTRAIT_HUD.dock=292)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=waiting\" --w 390 --h 844 --mobile --wait 15000 --out w.png --lint",
+   "suspectedCause": "`.dock { min-height: var(--dock-h) }` kept fixed so the static PORTRAIT_HUD.dock / SHORT_DOCK_H framing insets stay valid. Size the dock to content and feed its measured height to gameInsets, or frame the table larger.",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "portrait-camera-small-table",
+   "title": "Portrait camera framing leaves the table small with empty ceiling above and rug below",
+   "severity": "medium",
+   "category": "camera",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked",
+    "spectator (eliminated)"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile"
+   ],
+   "description": "The free area between banner (~y130-138) and dock (~y552) is ~414px, yet table and players fill only ~y265-460: ~120px of ceiling above (~165px at 430x932) and ~90px of empty rug below. Heads are ~35px, felt cards ~12px wide and unreadable; with 6 players the frog and bear are barely visible. After elimination the dock stays 276px tall just to show two crossed-out cards.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/six-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-game-start.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390o-spectator.png",
+    "client/src/scene/framing.ts:108-111 (gameMargin 0.15 portrait), fitFraming centring"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=six\" --w 390 --h 844 --mobile --wait 15000 --out six.png --lint",
+   "suspectedCause": "Width-limited fit (15% margin each side) and vertical centring of the bbox splits spare height between ceiling and rug. Use a smaller horizontal margin, top-align, or a higher/steeper camera in portrait; shrink the dock for spectators.",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "tablet-portrait-phone-dock",
+   "title": "Portrait tablets reuse the phone dock: tiny 50px hand cards, half-empty fixed-height dock, small table with empty bands",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "game",
+    "waiting",
+    "six",
+    "blocked",
+    "respond",
+    "blockresp",
+    "pendingblock",
+    "exchange",
+    "lose",
+    "over",
+    "invite"
+   ],
+   "viewports": [
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "900x1100 mobile"
+   ],
+   "description": "The portrait layout is used unchanged on tablets: two 50px unreadable mini-cards in a dock up to 720px wide; the 276px min-height dock is ~60% empty in waiting states; respond buttons sit at the top with space below; the table is framed small (820x1180: table y≈330-700 in free area y≈138-888, ~200px ceiling and ~190px rug). Compared with 1180x820 (90px cards, table fills the area) it looks sparse.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/six-portraits.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/waiting-portraits.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/six-900x1100.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/block-820x1180.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=waiting\" --w 820 --h 1180 --mobile --wait 8000 --out waiting-820x1180.png --lint",
+   "suspectedCause": "Portrait block (.hand --card-w 50px, --dock-h 276px, dock min-height) has no tablet-width step; portrait framing is width-bound. Add a wide-portrait variant (e.g. min-width 700px) with larger cards and use vertical slack in the camera.",
+   "sources": [
+    "sweep:tablet"
+   ]
+  },
+  {
+   "id": "emote-button-overlaps-dock",
+   "title": "Emote button overlaps the scaled dock's bottom-left corner at 1024px width",
+   "severity": "medium",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "pendingblock",
+    "blocked",
+    "waiting",
+    "six",
+    "lose",
+    "exchange",
+    "invite"
+   ],
+   "viewports": [
+    "1024x768",
+    "1024x1366 mobile"
+   ],
+   "description": "In scaled mode (0.93) the dock spans x52-972, while the emote toggle sits at [16,696,72,752] (left:16, bottom:16). The round button sits on the dock's rounded corner and almost touches the 'Công tước' caption, so the controls look glued together. 1180x820, 1280x720 and 1366x768 have a clear gap.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/game-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/crops2/f-g1024-emote.png",
+    "probe game-1024: .dock [52,559,972,756], .emote-dock [16,696,72,752]",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/dockleft.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/block-1024x1366.png",
+    "client/src/styles/ui-hud.css:1087-1095"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 1024 --h 768 --wait 7000 --out g1024.png --lint",
+   "suspectedCause": "`.emote-dock { left: 16px; bottom: 16px }` ignores the scaled dock width. Move the toggle above the dock's left end in scaled mode, shift the dock, or reduce the scale when width < dock + 2×emote.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:tablet"
+   ]
+  },
+  {
+   "id": "desktop-lobby-720-overflow",
+   "title": "Desktop lobby at 1280x720 is taller than the screen: seat 6 and 'Rời phòng' cut off, avatar row overflows",
+   "severity": "medium",
+   "category": "clipping",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "1280x720",
+    "~1366x650 laptop browser viewport"
+   ],
+   "description": "The two-column desktop lobby is used down to 600px height but needs ~740px. The seat list scrolls internally (399 vs 365) and seat 6 is sliced with no scroll cue; after scrolling the host row is cut. The right column scrolls (719/688): .lobby-cta [928,560,1264,729] runs past the viewport and 'Rời phòng' is cut at 720, and scrolling to it moves the tools off the top. With classic scrollbars the 8-avatar row needs 310px but gets 283px, so the owl sticks out and a horizontal scrollbar appears (329 > 321). 1366x768 fits.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1280x720.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1280x720-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1366x768.png",
+    "probe lobby-1280: .lobby-cta [928,560,1264,729], seatListScroll [399,365], rightSideScroll [719,688]",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/d1280-lobby-gpu-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/d1280-lobby.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-lobby-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-lobby-bots-scrolled.png",
+    "client/src/ui/responsive.ts:78",
+    "client/src/styles/ui-screens.css:181-205,476-479",
+    "client/src/ui/lobby/ProfilePanel.tsx:78"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1280 --h 720 --wait 7000 --out lobby1280.png --lint",
+   "suspectedCause": "lobbyLayout() returns 'desktop' for height >= 600. Raise the threshold (~740), make .lobby-cta sticky in desktop mode, compact at short heights, and use repeat(8, minmax(0, 1fr)) for the avatar picker.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:interactions",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "modals-centred-over-dock",
+   "title": "Mid-game decision modals are centred on the full viewport: they cut nameplates, crowd/overlap the dock and cover the table and emote button",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "lose",
+    "exchange"
+   ],
+   "viewports": [
+    "1440x900 desktop",
+    "390x844 mobile",
+    "430x932 mobile",
+    "390x844 mobile EN"
+   ],
+   "description": "The lose-influence and exchange modals ignore the dock zone. At 1440x900 the top edge (y≈230) crosses the Mai and Ông Gấu nameplates and the bottom is only 7-9px above the dock. On phones the modal covers every opponent and the table, its bottom overlaps the top of the dock and hand, and the emote button peeks half-hidden from behind its left edge (430x932), while the dimmed dock below shows only a hint line.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lose-1440x900.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/exchange-1440x900.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/exchange-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lose-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lose-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/exchange-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/exchange-390x844-en.png",
+    "client/src/styles/ui-base.css:679 (.modal-backdrop place-items:center)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lose\" --w 430 --h 932 --mobile --wait 15000 --out lose.png --lint",
+   "suspectedCause": ".modal-backdrop(.is-soft) centres over the whole screen with no in-game/portrait placement; emote dock not hidden. Centre in the area above the dock (padding-bottom: var(--dock-h)) or anchor the decision to the bottom/dock.",
+   "sources": [
+    "sweep:desktop-large",
+    "sweep:phone-portrait"
+   ]
+  },
+  {
+   "id": "exchange-modal-card-width",
+   "title": "Exchange modal uses a fixed 66px card width: overflows at 320px, wastes width at 390-430px",
+   "severity": "medium",
+   "category": "overflow",
+   "screens": [
+    "exchange"
+   ],
+   "viewports": [
+    "320x640 mobile",
+    "360x740 mobile",
+    "390x844 mobile",
+    "430x932 mobile",
+    "390x844 mobile EN"
+   ],
+   "description": "At 320x640 the four-card row is wider than the modal: the first 'ĐANG GIỮ' tag and the fourth card with 'MỚI RÚT' are clipped, and 'Đã chọn 0/2' wraps into three lines. At 360 it fits but tags touch. At 390/430 the 66px cards are too small to read and 60-70px+ of modal width goes unused; 76-80px cards would fit.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/exchange-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/exchange-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/exchange-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/exchange-430x932.png",
+    "client/src/styles/ui-responsive.css:806-822 (@media max-width 560px .exchange-modal --card-w: 66px)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=exchange\" --w 320 --h 640 --mobile --wait 15000 --out ex-320.png --lint",
+   "suspectedCause": "Fixed --card-w with .decision-cards nowrap. Use a width-based value, e.g. min(80px, (100vw - 70px)/4 - 8px), or a 2x2 grid below ~350px.",
+   "sources": [
+    "sweep:phone-small",
+    "sweep:phone-portrait"
+   ]
+  },
+  {
+   "id": "short-response-panel-overflow",
+   "title": "Short mode: response-panel headline overflows the fixed-height dock and duplicates the banner",
+   "severity": "medium",
+   "category": "overflow",
+   "screens": [
+    "pendingblock"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "932x430 mobile",
+    "667x375 mobile"
+   ],
+   "description": "In pendingblock the dock's response panel holds a 2-line claim, the question, the timer bar and two buttons, which is more than the 150-design-px dock, so the headline is pushed onto the dock's top border (.response-panel__head top 259 = dock top 259 at 844). Every respond-type screen also repeats the banner sentence in the dock, wasting scarce vertical space.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/crops/pendingblock-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/pendingblock-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-pendingblock-844x390.json",
+    "client/src/styles/ui-responsive.css:239-241,272-277,745-757"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=pendingblock\" --w 932 --h 430 --mobile --wait 8000 --out pb-932.png --lint",
+   "suspectedCause": "Short .dock has fixed height var(--dock-h). Portrait hides the duplicate claim (.response-panel__head > .avatar, .response-panel__claim) and lets the dock grow; short mode gets neither rule.",
+   "sources": [
+    "sweep:phone-landscape"
+   ]
+  },
+  {
+   "id": "gameover-tally-collapses",
+   "title": "Game over on landscape phones: 'Bảng thành tích' leaderboard collapses to its title or is cut",
+   "severity": "medium",
+   "category": "clipping",
+   "screens": [
+    "over"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "667x375 mobile",
+    "932x430 mobile"
+   ],
+   "description": "At 844x390 only the header shows, no rows (clientHeight 34). At 667x375 the box is 25px and the header is cut in half (scrollHeight 26 > clientHeight 19). At 932x430 only one row fits and the local player's row is hidden.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/m-over-667x375.json",
+    "client/src/styles/ui-hud.css:1433-1443,1527-1557",
+    "client/src/styles/ui-responsive.css:53-55"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=over\" --w 667 --h 375 --mobile --wait 8000 --out over-667.png --lint",
+   "suspectedCause": ".over-tally has min-height:0 in a column-flex .over-card capped at 100dvh - 40px, so it absorbs all overflow. Give it a 2-row minimum and let the card scroll, or put the portrait beside the title in short mode.",
+   "sources": [
+    "sweep:phone-landscape"
+   ]
+  },
+  {
+   "id": "hud-text-too-small",
+   "title": "Small label text (8-10.5px) made smaller still by HUD scale",
+   "severity": "medium",
+   "category": "readability",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked",
+    "exchange",
+    "lose",
+    "over",
+    "invite",
+    "lobby",
+    "target picker",
+    "top bar"
+   ],
+   "viewports": [
+    "1440x900 desktop",
+    "1920x1080 desktop",
+    "1366x768",
+    "1280x720",
+    "1024x768",
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "900x1100 mobile",
+    "600x960 mobile",
+    "1024x1366 mobile",
+    "1180x820 mobile",
+    "390x844 mobile",
+    "844x390 mobile",
+    "667x375 mobile"
+   ],
+   "description": "Base sizes: 'BỊP' bluff badges 9.5px (8px in portrait); 'PHÒNG'/'LƯỢT' chip labels, kbd hints, and tags ('BẠN LÀ MỤC TIÊU!', 'BẠN ĐÃ CHẶN', 'BẠN ĐÃ CHO QUA', 'ĐANG GIỮ'/'MỚI RÚT', lobby 'BẠN'/'BOT · VỪA') 10.5px. The uniform --hud-scale shrinks them further: 0.93 at 1024 wide (chip ≈9.8px, BỊP ≈8.8px); 0.82 at 844x390 and 0.72 at 667x375 (BỊP ≈6.8px, tags ≈7.6px, action names ≈10px, hand labels/XU/'CHẶN BẰNG' ≈8px). Lint reports unscaled sizes, so it understates this.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/json/game-1440x900.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/json/block-1440x900.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/game-1440-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/block-1440-resp.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/game-1024x768.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/block-1024x768.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/game-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/game-768x1024.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/game-1024x1366.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/game-768x1024-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/game-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/block-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-target-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/game-667x375.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/l844.json",
+    "client/src/styles/ui-hud.css:58-64 (.chip__label 10.5px)",
+    "client/src/styles/ui-responsive.css:208-210,285-320,539-544",
+    "client/src/ui/responsive.ts:40-44,72-75"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 667 --h 375 --mobile --wait 8000 --out game-667.png --lint",
+   "suspectedCause": "Base font sizes 8-10.5px plus `scale: var(--hud-scale)` on .dock/.hud-top/.phase-banner (SHORT_DESIGN_W=900 gives 0.72 at 667). Set an ~11px floor (post-scale) for badges/labels, or narrow the short design so the scale stays ~0.85.",
+   "sources": [
+    "sweep:desktop-large",
+    "sweep:laptop-small",
+    "sweep:tablet",
+    "sweep:phone-landscape",
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "home-landscape-below-fold",
+   "title": "Home on sideways phones: 'Tạo phòng' and the join row start below the fold while the sides stay empty",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "home"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "667x375 mobile",
+    "932x430 mobile"
+   ],
+   "description": "Home keeps a single centred ~440px column needing ~663px of height. The first view shows only the logo, name field and first avatar row (second row cut at 844/667); 'Tạo phòng' (top 423px at 844), the room code and 'Vào phòng' appear only after ~300px of scrolling, with ~200px empty on each side.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/home-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-home-scroll-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/home-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-home-scroll-667x375.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/home-932x430.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-home.png",
+    "client/src/styles/ui-responsive.css:57-106",
+    "client/src/styles/ui-screens.css:4-20"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=home\" --w 844 --h 390 --mobile --wait 8000 --out home-844.png --lint",
+   "suspectedCause": "The max-height:560px rules only hide the fan/tagline and shrink the logo; layout stays one column. Use a two-column landscape layout (logo+name+avatars left, create/join right) or a single 8-across avatar row.",
+   "sources": [
+    "sweep:phone-landscape",
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "rules-modal-phone-sideways-scroll",
+   "title": "Rules modal on phones: the whole sheet scrolls sideways and the 'Bị chặn bởi' column starts off-screen",
+   "severity": "medium",
+   "category": "overflow",
+   "screens": [
+    "game > menu > Luật chơi",
+    "lobby > Luật chơi",
+    "home > Luật chơi"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "360x740 mobile"
+   ],
+   "description": "The actions table has min-width 600px inside a ~346px .rules-scroll with overflow-x:auto (scrollWidth 606 vs 346). On open the 'BỊ CHẶN BỞI' column is off-screen and the effect column is cut mid-word. The sideways scroll moves the whole sheet, so the character cards and rules list below appear sliced. Only a thin scrollbar hints at it. Landscape and desktop are fine.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-rules.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-rules-sideways.png",
+    "client/src/styles/ui-responsive.css:649,713-720"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 390 --h 844 --mobile --wait 6000 --out rules-side.png --steps '[{\"eval\":\"document.querySelector(\\\"[aria-label=Menu]\\\").click(); 1\"},{\"wait\":500},{\"eval\":\"[...document.querySelectorAll(\\\".menu-item\\\")][0].click(); 1\"},{\"wait\":1200}]'",
+   "suspectedCause": "`.rules-scroll { overflow-x: auto }` + `.rules-table { min-width: 600px }`. Wrap only the table in its own overflow container, or reflow rows into stacked cards on narrow screens.",
+   "sources": [
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "zzz-covers-offline-pip",
+   "title": "Offline 'zzz' marker covers the offline player's card pip on phones",
+   "severity": "medium",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "390x844 mobile EN",
+    "844x390 mobile"
+   ],
+   "description": "Khoa is offline; the purple 'z Z' glyphs are drawn over his plate, right on his remaining red card pip and next to the wifi-off badge, so you can't see how many cards he has. On desktop the zzz sits beside the plate.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/khoa-zzz.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/respond-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844.png",
+    "client/src/scene/scene.css:424-460 (.sc-zzz)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=respond\" --w 430 --h 932 --mobile --wait 15000 --out r.png --lint",
+   "suspectedCause": ".sc-zzz is positioned in --u offsets with fixed 14-18px glyphs; on a phone --u is small so the plate lands on that spot. Put zzz below the plate in z-order or above/beside the plate.",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:phone-landscape"
+   ]
+  },
+  {
+   "id": "log-state-not-updated-on-mode-change",
+   "title": "Log open/closed is decided once at startup; rotating a tablet leaves the drawer covering the table",
+   "severity": "medium",
+   "category": "layout",
+   "screens": [
+    "game"
+   ],
+   "viewports": [
+    "iPad landscape→portrait (e.g. 1024x700 → 768x1024)",
+    "desktop window resized narrow"
+   ],
+   "description": "ui.showLog starts as !logStartsClosed() at store creation and is never updated when the layout mode changes. A tablet starting in landscape (side panel, showLog=true) and rotated to portrait gets the full-width drawer already open from top:138px to the dock, hiding the whole table.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/respond-360x740-log.png",
+    "client/src/store/useGame.ts:130",
+    "client/src/ui/responsive.ts:87-91,98-116"
+   ],
+   "reproCommand": "node shot.mjs --url \"http://localhost:5173/?mock=respond\" --w 360 --h 740 --mobile --out drawer.png --steps '[{\"click\":\"button[aria-label=\\\"Hiện nhật ký\\\"]\"},{\"wait\":800}]'",
+   "suspectedCause": "In useResponsiveAttributes close the log when logOverlay goes false→true, or keep separate open flags for panel and drawer.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "keyboard-flips-layout-mode",
+   "title": "Layout mode flips when the on-screen keyboard shrinks innerHeight (portrait lobby → 226px side column)",
+   "severity": "medium",
+   "category": "mobile-platform",
+   "screens": [
+    "lobby (editing name)",
+    "home (typing name / room code)"
+   ],
+   "viewports": [
+    "412x915 portrait → ~412x470 with keyboard (simulated)"
+   ],
+   "description": "hudLayout/lobbyLayout are recomputed from innerWidth/innerHeight on every resize. In browsers that shrink innerHeight for the keyboard (Android WebViews, Firefox Android, Chrome resizes-content), focusing the lobby name field switches the lobby to 'side' (~226px column, Start clipped to 'Bắt đầ', plates off-screen) and the HUD to 'short', then back on close. Home's max-height 560 query also jumps. The camera uses r3f container size while the HUD uses innerWidth/Height, so they can disagree.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/lobby-412x470-kbd.png",
+    "client/src/ui/responsive.ts:60-62,76-79,82-84,110",
+    "client/src/scene/camera/CameraRig.tsx:37,48-50,62-65",
+    "client/src/styles/ui-responsive.css:58,89",
+    "client/src/ui/lobby/ProfilePanel.tsx:65-73"
+   ],
+   "reproCommand": "node shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 412 --h 470 --mobile --out lobby-kbd.png --lint",
+   "suspectedCause": "Keep the previous mode while a text input has focus and only height shrank, use layout-viewport sizes, and add interactive-widget=resizes-visual to the viewport meta.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "no-touch-policy",
+   "title": "No page-level touch policy: pinch zoom, double-tap zoom and pull-to-refresh active over the 3D table",
+   "severity": "medium",
+   "category": "mobile-platform",
+   "screens": [
+    "game",
+    "lobby",
+    "home"
+   ],
+   "viewports": [
+    "all touch devices"
+   ],
+   "description": "touch-action: manipulation is set only on .ui-root buttons/links/inputs. The canvas, nameplates and non-button HUD surfaces keep touch-action: auto; html/body have no overscroll-behavior and the viewport meta doesn't restrict zoom. Pinching the table zooms the page and pushes the HUD off-screen, double-tapping plates can trigger iOS zoom, and a downward swipe can trigger pull-to-refresh mid-game.",
+   "evidence": [
+    "client/src/styles/ui-responsive.css:12-17",
+    "client/src/scene/scene.css:9-12,90-91",
+    "client/src/styles/tokens.css:44-55",
+    "client/index.html:5"
+   ],
+   "suspectedCause": "Add html, body { overscroll-behavior: none; touch-action: manipulation } and .sc-canvas { touch-action: none }.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "touch-disabled-action-no-feedback",
+   "title": "Touch users never see why an action is disabled (tooltips hidden, tap is a silent no-op)",
+   "severity": "medium",
+   "category": "mobile-platform",
+   "screens": [
+    "game (choose action)"
+   ],
+   "viewports": [
+    "all hover:none devices"
+   ],
+   "description": "On hover:none the .act-tip (description, blockers, bluff hint, must-coup note, disabled reason like 'needs 7 coins') is hidden. Tapping a greyed action does nothing, with no toast or hint.",
+   "evidence": [
+    "client/src/styles/ui-responsive.css:41-44",
+    "client/src/ui/game/ActionBar.tsx:72-74,85-87,97-114"
+   ],
+   "suspectedCause": "On tap of a disabled action show the already-computed reason as a toast/short tip; optionally long-press to open .act-tip.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "gameover-card-over-dock-1440",
+   "title": "Game-over card overlaps the dock at 1440x900 and cuts the dock's 'Bạn thắng!' status in half",
+   "severity": "medium",
+   "category": "overlap",
+   "screens": [
+    "over"
+   ],
+   "viewports": [
+    "1440x900 desktop",
+    "1920x1080 desktop (smaller overlap, text not cut)"
+   ],
+   "description": "The victory card (y≈108-778) is centred on the full viewport and covers the top ~100px of the dock (top ≈677). Under its bottom edge the dock's winner avatar and 'Bạn thắng!' show only their lower half. The card also hides Khoa's nameplate. At 1920x1080 overlap is ~50px and text is clear.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/over-1440x900.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/over-1440-bottom.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/over-1920x1080.png",
+    "client/src/styles/ui-hud.css:1386-1443"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=over\" --w 1440 --h 900 --wait 8000 --out over-1440.png --lint",
+   "suspectedCause": ".over-backdrop centres .over-card ignoring the dock. Hide the dock status during over, or pad the backdrop bottom by the dock height.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "gameover-card-over-banner",
+   "title": "Game-over card/ribbon sits over the phase banner, leaving truncated banner text peeking out",
+   "severity": "low",
+   "category": "overlap",
+   "screens": [
+    "over"
+   ],
+   "viewports": [
+    "1280x720",
+    "1024x768",
+    "390x844 mobile EN"
+   ],
+   "description": "The victory card and its 'CHIẾN THẮNG'/'WINNER' ribbon are drawn over the phase banner. At 1280x720 the banner's avatar and 'Bạn đã chiế…' show left of the ribbon, cut mid-word; at 1024x768 the ribbon covers the banner's middle. In English at 390 the New game/Leave buttons stack (side by side in VI), making the card taller so the ribbon (y≈88-130) lies over the dimmed 'You won!' banner. 1366x768 is clear.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/over-1280x720.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/over-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-390x844-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-390x844.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=over\" --w 1280 --h 720 --wait 7000 --out over1280.png --lint",
+   "suspectedCause": "The banner's z-index sits above the backdrop dim and .over-card is vertically centred. Hide the phase banner while the over card is open, or push the card below it on short screens.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:phone-portrait"
+   ]
+  },
+  {
+   "id": "home-overflow-short-viewports",
+   "title": "Home screen overflows on 640-745px-tall viewports: bottom rows below the fold, clipped placeholder, awkward wraps",
+   "severity": "low",
+   "category": "overflow",
+   "screens": [
+    "home",
+    "replaced"
+   ],
+   "viewports": [
+    "1280x720",
+    "~650px-tall laptop browser viewport",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile"
+   ],
+   "description": "The compact home rules apply only at max-height 560px. At 1280x720 .home-col spans y20-723 (scrollHeight 743 vs 720): the panel's bottom border/shadow are cut and the page scrolls 23px (also behind the 'replaced' modal); at ~650px the join row would be ~50px below the fold. On phones: at 375x667 the join row is cut and the tool row needs scrolling; at 320x640 even the join row is below the fold; at 360x740 the tool row sits half off-screen (720-764). The 'MÃ PHÒNG' placeholder is clipped ('MÃ PHÒNC'/'MÃ PHÒN…') by its letter-spacing, 'Chó mặt xệ' wraps to two lines, and VI/EN is 31px tall.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/home-1280x720.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/replaced-1280x720.png",
+    "probe home-1280: .home-col [420,20,860,723], homeScroll [743,720]",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-home.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-home-run1.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280home.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/home-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/home-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/home-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/replaced-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-home.png",
+    "client/src/styles/ui-screens.css:4-26",
+    "client/src/styles/ui-responsive.css:56-110",
+    "client/src/styles/ui-base.css:284-300 (.input-code)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=home\" --w 1280 --h 720 --wait 7000 --out home1280.png --lint",
+   "suspectedCause": "No compaction step between 560 and ~760px height (40px logo padding, card fan, gaps). Add a middle step (e.g. max-height: 760px: smaller logo, hide tagline/fan), reduce placeholder letter-spacing or shorten it.",
+   "sources": [
+    "sweep:laptop-small",
+    "sweep:real-flow",
+    "sweep:phone-small",
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "touch-targets-small",
+   "title": "Touch targets under 32-44px (VI/EN toggles, segmented buttons, kick x, 'Xem bàn', 'Huỷ', scaled menu items)",
+   "severity": "low",
+   "category": "touch-target",
+   "screens": [
+    "home",
+    "lobby",
+    "replaced",
+    "over",
+    "game",
+    "game > menu",
+    "target picker",
+    "block",
+    "waiting",
+    "blocked",
+    "exchange"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile",
+    "600x960 mobile",
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "900x1100 mobile",
+    "1024x1366 mobile",
+    "1180x820 mobile",
+    "844x390 mobile",
+    "667x375 mobile",
+    "932x430 mobile",
+    "667x330 mobile",
+    "440x470 mobile"
+   ],
+   "description": "VI/EN toggle 37x31 / 43x31 on home, lobby and replaced; in the hamburger menu VI/EN 30x24/36x24 (portrait) and 25x20 at 844 or 21x17 at 667x330 because the menu is scaled. Lobby bot-level and timer segmented buttons are 31px tall (54-74px wide at 1180). Seat kick 'x' 29-32px. 'Xem bàn' link 94x27. Target picker 'Huỷ' 62x29 (844) / 54x25 (667). Top-bar icon buttons 31-32px and menu items 30px at 667; at 440x470 the scale clamps to 0.5 (buttons ~20px, labels ~7px) while plates stay full size. In-world plate badges ≈9px.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/lobby-1180x820.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/over-768x1024.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/lobby-1180x820-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lobby-430x932.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/over-390x844.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/home-390x844.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/block-390x844.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-en-360x740.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-360x740.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lobby-375x667.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/over-360x740.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-menu-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-menu-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-target-667x375.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/over-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/lobby-844x390.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-menu-open.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-menu.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-lobby.json",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/menu-667x330.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/game-440x470.png",
+    "client/src/ui/common/Toggles.tsx:12",
+    "client/src/ui/responsive.ts:42-45,66-68",
+    "client/src/styles/ui-responsive.css:208-210"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 390 --h 844 --mobile --wait 15000 --out lobby.png --lint",
+   "suspectedCause": ".seg-toggle(.is-compact), .seat-card__kick, .link-btn, btn-sm have no (hover:none)/(pointer:coarse) min-size bump, and the scaled .hud-top/.hud-menu__pop/dock shrink them further. Give ~40px min hit areas, keep menu/top buttons out of the scaled group, and use portrait/narrow layout when width < SHORT_DESIGN_W × 0.55.",
+   "sources": [
+    "sweep:tablet",
+    "sweep:phone-portrait",
+    "sweep:phone-small",
+    "sweep:phone-landscape",
+    "sweep:interactions",
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "bluff-tag-overlaps-emblem",
+   "title": "Portrait BỊP/BLUFF tag is 8px and (in English) overlaps the character emblems",
+   "severity": "low",
+   "category": "readability",
+   "screens": [
+    "game (choose action)"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "430x932 mobile",
+    "390x844 mobile EN",
+    "360x740 mobile"
+   ],
+   "description": "On Assassinate/Steal/Exchange the dark bluff tag sits in the top-right corner overlapping the button's top edge; the wider English 'BLUFF' (x61-94 at 360) covers the upper-right of the emblems (x47-73). Tag text is 8px. Vietnamese 'BỊP' fits. At 360 EN, 'Foreign Aid' also wraps and drops its '+2' badge.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/crops/game-en-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/game-390x844-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p360-en-game.png",
+    "client/src/styles/ui-responsive.css:539-544",
+    "client/src/styles/ui-hud.css:675"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 390 --h 844 --mobile --wait 15000 --out g.png --lint --steps '[{\"eval\":\"localStorage.setItem(\\'coup3d.prefs\\', JSON.stringify({lang:\\'en\\',muted:true}))\"},{\"eval\":\"location.reload()\"},{\"wait\":15000}]'",
+   "suspectedCause": "`:root[data-hud='portrait'] .act-btn__bluff { font-size: 8px; top:3px; right:3px }` with a centred 26px emblem and only 6px top padding.",
+   "sources": [
+    "sweep:phone-portrait",
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "action-labels-wrap",
+   "title": "Action button labels wrap unevenly ('Foreign Aid', 'Đảo chính' at 320) and 'Assassinate' fills its button edge to edge",
+   "severity": "low",
+   "category": "i18n",
+   "screens": [
+    "game",
+    "game (EN)",
+    "lobby (EN)"
+   ],
+   "viewports": [
+    "1440x900 desktop",
+    "1280x720",
+    "844x390 mobile",
+    "360x740 mobile",
+    "320x640 mobile"
+   ],
+   "description": "In English 'Foreign Aid' is the only action label that wraps to two lines, so its label/'+2' badge sits lower than neighbours (≈6px at 844); 'Assassinate' runs edge to edge with ~2px padding. At 320x640 Vietnamese 'Đảo chính' wraps and pushes its icon up. Separately, the English lobby invite hint quotes the Vietnamese README heading 'Chơi với bạn bè' (localhost/dev only).",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-1440x900-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/game-1440-en-dock.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1440x900-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/game-1280x720-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/game-844x390-en.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/game-en-360x740.png",
+    "client/src/styles/ui-hud.css ~582 (.act-btn padding)",
+    "client/src/styles/ui-responsive.css:301-320"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 1440 --h 900 --wait 8000 --out game-1440-en.png --lint --steps '[{\"eval\":\"localStorage.setItem(\\'coup3d.prefs\\', JSON.stringify({lang:\\'en\\',muted:true}))\"},{\"eval\":\"location.reload()\"},{\"wait\":15000}]'",
+   "suspectedCause": "Seven equal-width buttons with tight side padding and a label box whose height depends on wrapping. Use a fixed two-line name box or bottom-align name+pill, slightly smaller font for long labels (and below 340px), or shorten 'Foreign Aid'.",
+   "sources": [
+    "sweep:desktop-large",
+    "sweep:laptop-small",
+    "sweep:phone-landscape",
+    "sweep:phone-small"
+   ]
+  },
+  {
+   "id": "emote-picker-covers-content",
+   "title": "Emote picker covers the left name plate (short) or your own hand (desktop), with ~9.4px labels in short mode",
+   "severity": "low",
+   "category": "overlap",
+   "screens": [
+    "game (emote picker open)"
+   ],
+   "viewports": [
+    "844x390 mobile",
+    "1280x720 desktop",
+    "390x844 mobile"
+   ],
+   "description": "In short mode the popover opens upward over Bé Heo's plate (only 'eo' visible) and the left end of the banner timer; the whole emote dock is scaled 0.82 so the 11.5px labels render ~9.4px, and 'Tha cho tôi!' wraps so rows are uneven. On desktop 1280x720 it covers the Công tước hand card.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-l/x-emote-844x390.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/l844-emote.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/d1280-emote.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-emote.png",
+    "client/src/styles/ui-responsive.css:208-210,342-350,771-773"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 844 --h 390 --mobile --wait 8000 --out emote-844.png --lint --steps '[{\"clickText\":\"Biểu cảm\"},{\"wait\":1500}]'",
+   "suspectedCause": "Tall 4x2 grid opening upward from a scaled emote dock. Open sideways over the dock or use a single-row picker; don't scale its labels below ~11px.",
+   "sources": [
+    "sweep:phone-landscape",
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "dock-text-orphan-wraps",
+   "title": "Dock status text leaves orphan words and the animated '•••' wraps onto its own line",
+   "severity": "low",
+   "category": "readability",
+   "screens": [
+    "blocked",
+    "lose",
+    "exchange",
+    "waiting"
+   ],
+   "viewports": [
+    "768x1024 mobile",
+    "820x1180 mobile",
+    "390x844 mobile",
+    "430x932 mobile"
+   ],
+   "description": "Long waiting texts ('Đang chờ Bé Heo, Mai và Khoa quyết định có thách thức Ông Gấu không', 'Đang chờ Ông Gấu và Khoa quyết định') fill the line and the trailing '•••' drops alone to a second line. The hint 'Hãy đưa ra lựa chọn trong bảng giữa màn hình' leaves 'hình' alone on line 2.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/blocked-portraits.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/lose-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/waiting-430x932.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=blocked\" --w 768 --h 1024 --mobile --wait 8000 --out blocked-768x1024.png --lint",
+   "suspectedCause": "Dots are a separate inline element and there's no text-wrap: balance/pretty. Wrap the last word + dots in a nowrap span and add text-wrap: pretty.",
+   "sources": [
+    "sweep:tablet",
+    "sweep:phone-portrait"
+   ]
+  },
+  {
+   "id": "home-background-cast-framing",
+   "title": "Home background 3D cast framed too close: characters cropped at edges and poking out behind the logo",
+   "severity": "low",
+   "category": "camera",
+   "screens": [
+    "home",
+    "replaced"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop",
+    "430x932 mobile",
+    "390x844 mobile"
+   ],
+   "description": "The orbiting camera shows oversized characters cut by the screen edges (a bear from behind bottom-left, the bunny behind the corner buttons); at 1440x900 the dog's head pokes out behind the 'COUP' logo. On phones a close character (fox) shows only an ear and one eye squeezed between logo and form, and furniture pokes out bottom-left. Decorative; what shows depends on orbit timing.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/home-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/home-1440x900.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/replaced-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/home-430x932.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/replaced-390x844.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-p/home-390x844.png",
+    "client/src/scene/HomeCast.tsx",
+    "client/src/scene/camera/CameraRig.tsx (home orbit)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=home\" --w 1440 --h 900 --wait 12000 --out home-1440.png --lint",
+   "suspectedCause": "HomeCast camera path/distance does not keep clear of the centred logo and card column.",
+   "sources": [
+    "sweep:desktop-large",
+    "sweep:phone-portrait"
+   ]
+  },
+  {
+   "id": "banner-slices-tavern-sign",
+   "title": "Phase banner slices the in-world 'QUÁN BÀI NẮNG' sign, leaving garbled half-letters",
+   "severity": "low",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "lose",
+    "exchange",
+    "waiting",
+    "six",
+    "pendingblock",
+    "blocked",
+    "invite"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop (pendingblock, blocked)"
+   ],
+   "description": "At 1920x1080 the 1.18-scaled banner sits exactly over the tavern sign; only the bottom halves of its letters show, reading as a garbled strip. At 1440x900 the sign is visible under a 2-line banner, but the 3-line pendingblock/blocked banners slice it the same way.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/game-1920-sign.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/blocked-1440-sign.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-1440x900.png (sign fully visible)"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 1920 --h 1080 --wait 8000 --out game-1920.png --lint",
+   "suspectedCause": "gameInsets top 64*s (s=1 on desktop) ignores the 1.18 upscale and taller banners; move the sign/framing point or reserve the real banner height.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "large-scale-not-in-hudlayout",
+   "title": "Large-screen 1.18 HUD scale is not modelled in hudLayout/gameInsets",
+   "severity": "low",
+   "category": "camera",
+   "screens": [
+    "game",
+    "six"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "2560x1080 desktop"
+   ],
+   "description": "The (min-width:1600px) and (min-height:900px) query scales dock/banner/top bar by 1.18, but hudLayout reports scale 1 and gameInsets reserves bottom 230 / top 64. At 1920x1080 the dock (818-1068) covers ~32px of the framed rect; the 5% margin hides it for now, but CSS and JS use two breakpoint systems.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/six-1920x1080.png",
+    "client/src/styles/ui-hud.css:1610-1643",
+    "client/src/scene/framing.ts:103-104"
+   ],
+   "suspectedCause": "Move the 1.18 large scale into hudLayout (as --hud-scale) so framing and CSS agree.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "lobby-no-large-scale",
+   "title": "Lobby does not scale up at 1920x1080: small side panels with ~300px empty space under each column",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "1920x1080 desktop"
+   ],
+   "description": "The game HUD scales 1.18 at 1920x1080 but lobby panels keep their 1440 pixel size (left column ends y≈775, right y≈730), leaving ~300px of bare floor under each and undersized text next to the huge characters.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/lobby-1920-leftbottom.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1440x900.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1920 --h 1080 --wait 8000 --out lobby-1920.png --lint",
+   "suspectedCause": "ui-hud.css:1610 only scales .dock/.phase-banner/.hud-top/.emote-dock/.modal; no large-screen rule for .lobby-side/.lobby-banner; lobbyInsets would need matching numbers.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "six-cards-ghost-clipped",
+   "title": "Six-player table: adjacent players' revealed cards run together; eliminated owl's ghost clipped by the log at 1920",
+   "severity": "low",
+   "category": "camera",
+   "screens": [
+    "six"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop"
+   ],
+   "description": "Khoa's revealed Thuyền trưởng and Cú Mèo's two revealed cards sit in one row between frog and owl, so ownership is unclear. At 1920x1080 the ghost above the eliminated Cú Mèo (x≈1530-1590) is cut by the log panel.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/six-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/crops/six-1920-right.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/six-1440x900.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=six\" --w 1920 --h 1080 --wait 8000 --out six-1920.png --lint",
+   "suspectedCause": "seatFramePoints() doesn't include the ghost; per-seat card placement from scene/layout.ts CARD_RADIUS.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "bunny-ears-through-plate",
+   "title": "Mai's nameplate cuts across the bunny's ears",
+   "severity": "low",
+   "category": "overlap",
+   "screens": [
+    "game",
+    "respond",
+    "block",
+    "blockresp",
+    "lobby",
+    "waiting",
+    "pendingblock",
+    "blocked"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop"
+   ],
+   "description": "The bunny's tall ears reach through the 'Mai' plate, so it looks skewered instead of floating above the head; most visible at 1920x1080 and in the lobby at both sizes.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/game-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1440x900.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1920 --h 1080 --wait 8000 --out lobby-1920.png --lint",
+   "suspectedCause": "Fixed PLATE_Y (scene/layout.ts) regardless of avatar height; add a per-avatar plate offset.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "lobby-empty-seat-label-inconsistent",
+   "title": "Lobby seat list: first empty seat drops the 'Ghế trống' label; add-bot button is icon-only",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop"
+   ],
+   "description": "For the host, the first empty seat shows dashed avatar, a gap, 'Ngồi đây' and an icon-only bot button, while the next empty seat shows 'Ghế trống' + 'Ngồi đây'. Inconsistent rows; add-bot has only a tooltip.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/lobby-1440x900.png",
+    "client/src/ui/lobby/SeatCard.tsx:35"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1440 --h 900 --wait 8000 --out lobby-1440.png --lint",
+   "suspectedCause": "SeatCard.tsx:35 hides the empty-seat label when isHost && canAddBot.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "replaced-dialog-widow",
+   "title": "'Session opened in another tab' dialog leaves 'nối.' alone on its own line",
+   "severity": "low",
+   "category": "readability",
+   "screens": [
+    "replaced"
+   ],
+   "viewports": [
+    "1920x1080 desktop",
+    "1440x900 desktop"
+   ],
+   "description": "'Mỗi lúc chỉ một tab được kết nối.' wraps so only 'nối.' sits on the third line at both sizes.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/replaced-1920x1080.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-l/replaced-1440x900.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=replaced\" --w 1440 --h 900 --wait 8000 --out replaced-1440.png --lint",
+   "suspectedCause": "p.confirm-modal__body needs text-wrap: pretty or a slightly wider modal.",
+   "sources": [
+    "sweep:desktop-large"
+   ]
+  },
+  {
+   "id": "side-lobby-sticky-cta-no-cue",
+   "title": "Side-lobby sticky Start bar cuts through the seat list with no scroll cue (1024x768)",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "1024x768"
+   ],
+   "description": "The sticky 'Bắt đầu'/'Rời phòng' bar (y696-768) cuts seat 4 in half; seat 5's buttons are under it (lint covered). The column scrolls (scrollHeight 1455) but nothing shows settings/profile continue below.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1024x768.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/probe/lobby-1024x768-scrolled.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/desk-s/lobby-1024x768.json",
+    "client/src/styles/ui-responsive.css:111-180"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=lobby\" --w 1024 --h 768 --wait 7000 --out lobby1024.png --lint",
+   "suspectedCause": "One stacked column with a sticky .lobby-cta; add a gradient/shadow above the bar and collapse the localhost hint/code card.",
+   "sources": [
+    "sweep:laptop-small"
+   ]
+  },
+  {
+   "id": "target-picker-keyboard-hint-touch",
+   "title": "Target picker shows a '(phím số)' / '(number keys)' hint on touch devices",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "game (Steal/Coup/Assassinate target picker)"
+   ],
+   "viewports": [
+    "1024x1366 mobile",
+    "1180x820 mobile"
+   ],
+   "description": "On touch tablets in desktop/scaled modes the hint reads 'Bấm vào nhân vật trên bàn hoặc chọn bên dưới (phím số).' The number-key reference is meaningless without a keyboard; other key hints are hidden under hover:none.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/crops/ix-1024-target.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/tablet/montage/ix-1180x820.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 1024 --h 1366 --mobile --wait 8000 --out ix-1024.png --steps '[{\"clickText\":\"Cướp\"},{\"wait\":1200},{\"shot\":\"ix-1024-target.png\"}]'",
+   "suspectedCause": "i18n/ui.ts:176 and :475 'target.hint' hard-codes the key hint; use a touch variant or hide .target-picker__hint under hover:none.",
+   "sources": [
+    "sweep:tablet"
+   ]
+  },
+  {
+   "id": "target-picker-header-wrap",
+   "title": "Target picker header wraps awkwardly on phones; reset-confirm buttons stack unevenly",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "game > target picker",
+    "reset-confirm modal"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "360x740 mobile"
+   ],
+   "description": "'Cướp: chọn mục tiêu' breaks into 'Cướp: chọn mục / tiêu' because the claim chip and Huỷ share its row. Target buttons (169x46/154x46) fit. The reset-confirm modal's buttons also stack unevenly at 390.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/interact/p390-target.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 390 --h 844 --mobile --wait 7000 --out target.png --steps '[{\"eval\":\"document.querySelector(\\\".act-btn--steal\\\").click(); 1\"},{\"wait\":1000}]'",
+   "sources": [
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "confirm-modal-buttons-unbalanced",
+   "title": "Confirm modals on narrow phones: stacked buttons right-aligned with unequal widths; dock hint half-covered at 320",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "invite",
+    "lose",
+    "exchange"
+   ],
+   "viewports": [
+    "375x667 mobile",
+    "360x740 mobile",
+    "320x640 mobile"
+   ],
+   "description": "In 'Chuyển sang phòng NEWXX?' the two actions wrap into right-aligned rows of different widths ('Ở lại KX7QP' narrow, 'Rời và vào NEWXX' wide). In lose/exchange at 320 the dock hint is half-covered by the modal's bottom edge.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/invite-320x640.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/invite-375x667.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/lose-320x640.png"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=invite\" --w 320 --h 640 --mobile --wait 15000 --out invite-320.png",
+   "suspectedCause": ".confirm-modal__buttons is flex-wrap with justify-content: flex-end and no small-screen full-width stacking rule.",
+   "sources": [
+    "sweep:phone-small"
+   ]
+  },
+  {
+   "id": "rules-empty-keys-heading",
+   "title": "Rules modal on touch devices ends with an empty 'Phím tắt' heading",
+   "severity": "low",
+   "category": "other",
+   "screens": [
+    "rules modal"
+   ],
+   "viewports": [
+    "390x844 mobile",
+    "360x740 mobile",
+    "844x390 mobile"
+   ],
+   "description": "On hover:none the key list is hidden but its 'Phím tắt' heading is not, so the sheet ends with an empty heading.",
+   "evidence": [
+    "client/src/ui/RulesModal.tsx:99-100",
+    "client/src/styles/ui-responsive.css:19-25",
+    "observed in the Browser pane at 390x844 (hover:none) with the sheet scrolled to scrollTop max"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=game\" --w 390 --h 844 --mobile --wait 6000 --out rules-bottom.png --steps '[{\"eval\":\"document.querySelector(\\\"[aria-label=Menu]\\\").click(); 1\"},{\"wait\":500},{\"eval\":\"[...document.querySelectorAll(\\\".menu-item\\\")][0].click(); 1\"},{\"wait\":1200},{\"eval\":\"document.querySelector(\\\".rules-scroll\\\").scrollTop=99999; 1\"},{\"wait\":500}]'",
+   "suspectedCause": "`.rules-keys { display:none }` under hover:none doesn't hide the preceding h3.rules-h; wrap both and hide the section.",
+   "sources": [
+    "sweep:interactions"
+   ]
+  },
+  {
+   "id": "over-mini-banner-wrap",
+   "title": "'Xem bàn' mini banner: winner text wraps to 3 one-word lines and covers the emote button",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "game over – minimized banner"
+   ],
+   "viewports": [
+    "390x844 mobile"
+   ],
+   "description": "After 'Xem bàn', .over-mini squeezes 'Heo Mập thắng!' into 'Heo / Mập / thắng!' beside two buttons; lint reports the emote toggle covered. The winner line also appears in the banner and dock (three times on screen).",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/crop-p390o-mini.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390o-final.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390o.json"
+   ],
+   "reproCommand": "cd scratchpad && node shot-long.mjs --timeout 1750000 --url http://localhost:5173/ --w 390 --h 844 --mobile --dpr 1 --wait 500 --out shots/real/x.png --lint --steps \"$(node mkover.mjs p390o)\"",
+   "suspectedCause": "Portrait .over-mini text column has no min-width and shares the emote dock's corner; stack buttons under the text and move clear of .emote-dock.",
+   "sources": [
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "first-turn-tooltip-under-cursor",
+   "title": "Desktop first turn: action tooltip pops over the log because the cursor is where 'Bắt đầu' was",
+   "severity": "low",
+   "category": "overlap",
+   "screens": [
+    "game – first turn"
+   ],
+   "viewports": [
+    "1280x720"
+   ],
+   "description": "After clicking 'Bắt đầu' (~x1096,y577), the HUD mounts with 'Đổi bài' under the pointer; its hover lift and .act-tip show immediately and cover part of the log until the mouse moves.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/d1280-myturn.png"
+   ],
+   "reproCommand": "cd scratchpad && node shot-long.mjs --timeout 1700000 --url http://localhost:5173/ --w 1280 --h 720 --wait 500 --out shots/real/x.png --steps \"$(node mkflow3.mjs d1280)\"",
+   "suspectedCause": ".act-wrap:hover .act-tip with no delay or first-mount pointer guard.",
+   "sources": [
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "portrait-lobby-subtitle-plate-peek",
+   "title": "Portrait lobby: subtitle orphan word; a 3D plate peeks through the side gutter while scrolling",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "lobby"
+   ],
+   "viewports": [
+    "390x844 mobile"
+   ],
+   "description": "The 'Sảnh chờ' subtitle leaves 'trống.' alone on a line. When the lobby column scrolls, a plate fragment ('eo') shows in the 8px gutter at the left edge.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-lobby-top.png",
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/real/p390-lobby-bots.png"
+   ],
+   "reproCommand": "cd scratchpad && node shot-long.mjs --timeout 1700000 --url http://localhost:5173/ --w 390 --h 844 --mobile --dpr 1 --wait 500 --out shots/real/x.png --steps \"$(node mkflow3.mjs p390)\"",
+   "suspectedCause": ".lobby-banner__sub lacks text-wrap: balance; drei <Html> plates aren't hidden/clipped when the portrait lobby column scrolls over the table strip.",
+   "sources": [
+    "sweep:real-flow"
+   ]
+  },
+  {
+   "id": "fouc-data-hud",
+   "title": "First frames on a phone render the desktop HUD/lobby before data-hud/data-lobby are applied",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "game",
+    "respond",
+    "lobby"
+   ],
+   "viewports": [
+    "375x667 mobile",
+    "360x740 mobile"
+   ],
+   "description": "Under load, first-pass shots caught the desktop HUD on a 360px phone (overlapping top bar, off-screen dock and log tab; lobby banner ~45px wide with both columns stacked). With --wait 0, .ui-root was mounted while dataset.hud was still unset. On slow phones this is a flash of broken layout.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shots/phone-s/fouc-respond-360x740.png",
+    "client/src/ui/responsive.ts:98-117",
+    "client/src/ui/UIRoot.tsx:41",
+    "client/src/main.tsx:22-37"
+   ],
+   "reproCommand": "node /private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/shot.mjs --url \"http://localhost:5173/?mock=respond\" --w 360 --h 740 --mobile --wait 0 --out fouc.png --steps '[{\"eval\":\"new Promise(r=>{const t=()=>document.querySelector(\\\".ui-root\\\")?r(document.documentElement.dataset.hud||\\\"UNSET\\\"):setTimeout(t,5);t()})\"}]'",
+   "suspectedCause": "useResponsiveAttributes sets attributes in a passive useEffect; run apply() synchronously before render (main.tsx / module load) or use useLayoutEffect.",
+   "sources": [
+    "sweep:phone-small"
+   ]
+  },
+  {
+   "id": "safe-area-half-wired",
+   "title": "Safe-area support is half-wired (no viewport-fit=cover; constants ignore the insets)",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "game",
+    "lobby",
+    "home"
+   ],
+   "viewports": [
+    "iPhone with notch, landscape and portrait"
+   ],
+   "description": "Without viewport-fit=cover every env(safe-area-inset-*) is 0 and iOS letterboxes landscape pages, taking width from the short layout. Adding cover alone would break portrait: .hud-top/.phase-banner add the inset but the drawer (138px), toasts (140px) and PORTRAIT_HUD.top don't; short-mode dock/banner/toasts ignore insets.",
+   "evidence": [
+    "client/index.html:5",
+    "client/src/styles/ui-responsive.css:379,413,443,640,272-277",
+    "client/src/scene/framing.ts:99"
+   ],
+   "suspectedCause": "Add viewport-fit=cover and read insets in one place (CSS variables shared by CSS and framing.ts).",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "long-press-image-callout",
+   "title": "Long-press on hand cards and avatars opens the image callout / context menu",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "game (hand, modals)",
+    "lobby (avatars)"
+   ],
+   "viewports": [
+    "iOS Safari",
+    "Android Chrome"
+   ],
+   "description": "Cards, avatars and character icons are <img>; -webkit-touch-callout: none is not set, so long-pressing a hand card opens the iOS preview/share sheet or Android 'Download image'.",
+   "evidence": [
+    "client/src/ui/common/GameCard.tsx:27",
+    "client/src/ui/common/Avatar.tsx:20",
+    "client/src/ui/common/CharChip.tsx:27",
+    "client/src/styles/ui-base.css:16-23"
+   ],
+   "suspectedCause": "Add .ui-root img, .sc-root img { -webkit-touch-callout: none; } and optionally prevent contextmenu in the HUD.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "title-only-info-touch",
+   "title": "Some information is only available through title tooltips on touch",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "game (target picker)",
+    "game (top bar)"
+   ],
+   "viewports": [
+    "all hover:none devices"
+   ],
+   "description": "In the target picker a revealed card is a coloured struck-through chip with the name only in title, so touch users must tell characters apart by colour. Top-bar treasury and deck chips are labelled only via title.",
+   "evidence": [
+    "client/src/ui/game/TargetPicker.tsx:99-106",
+    "client/src/styles/ui-hud.css:905-912",
+    "client/src/ui/game/TopBar.tsx:42-49"
+   ],
+   "suspectedCause": "Use the character emblem (as nameplate pips do) instead of a colour chip.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "room-code-input-mobile-keyboard",
+   "title": "Room-code input is not tuned for mobile keyboards",
+   "severity": "low",
+   "category": "mobile-platform",
+   "screens": [
+    "home"
+   ],
+   "viewports": [
+    "iOS / Android portrait"
+   ],
+   "description": "The code field lacks autoCapitalize='characters', autoCorrect='off' and enterKeyHint='go', so iOS opens a lowercase keyboard and may autocorrect the code, and the return key isn't labelled Go/Join.",
+   "evidence": [
+    "client/src/ui/home/HomeScreen.tsx:143-152"
+   ],
+   "suspectedCause": "Add autoCapitalize=\"characters\" autoCorrect=\"off\" enterKeyHint=\"go\" (and enterKeyHint on name inputs).",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  },
+  {
+   "id": "tall-tablet-landscape-hud",
+   "title": "Tall tablets wider than 900px in portrait (iPad Pro 12.9) get the landscape HUD with large empty bands",
+   "severity": "low",
+   "category": "layout",
+   "screens": [
+    "six"
+   ],
+   "viewports": [
+    "1024x1366 mobile"
+   ],
+   "description": "PORTRAIT_MAX_W=900 sends 1024x1366 to the scaled landscape HUD (s=0.93) with a width-limited camera fit, leaving about a third of the screen as empty ceiling and rug; it also triggers the banner/chip overlap and emote/dock overlap reported elsewhere.",
+   "evidence": [
+    "/private/tmp/claude-501/-Users-leanhtuan-Documents-projects-coup-3d/6303ac7d-7d07-4171-9c6b-a0493fb17690/scratchpad/static-audit/six-1024x1366.png",
+    "client/src/ui/responsive.ts:35,60-62"
+   ],
+   "reproCommand": "node shot.mjs --url \"http://localhost:5173/?mock=six\" --w 1024 --h 1366 --mobile --out ipadpro.png --lint",
+   "suspectedCause": "Raise PORTRAIT_MAX_W to ~1100 or use portrait whenever h ≥ 1.15w.",
+   "sources": [
+    "audit:static-mobile"
+   ]
+  }
+ ]
+}
